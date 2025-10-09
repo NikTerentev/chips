@@ -337,6 +337,79 @@ void decode_instruction(uint16_t instruction, char **message,
         snprintf(*message, 256, "Add value %x to register V%x",
                  third_and_fourth_nibbles, second_nibble);
         break;
+    case 0x8:
+        switch (fourth_nibble) {
+            case 0x0:
+                appstate->chip8_context.V[second_nibble] = appstate->chip8_context.V[third_nibble]; 
+                snprintf(*message, 256, "V%x is set to the value of V%x",
+                         second_nibble, third_nibble);
+                break;
+            case 0x1:
+                appstate->chip8_context.V[second_nibble] |= appstate->chip8_context.V[third_nibble]; 
+                snprintf(*message, 256, "V%x is set to the bitwise OR of V%x and V%x",
+                         second_nibble, second_nibble, third_nibble);
+                break;
+            case 0x2:
+                appstate->chip8_context.V[second_nibble] &= appstate->chip8_context.V[third_nibble]; 
+                snprintf(*message, 256, "V%x is set to the bitwise AND of V%x and V%x",
+                         second_nibble, second_nibble, third_nibble);
+                break;
+            case 0x3:
+                appstate->chip8_context.V[second_nibble] ^= appstate->chip8_context.V[third_nibble]; 
+                snprintf(*message, 256, "V%x is set to the bitwise XOR of V%x and V%x",
+                         second_nibble, second_nibble, third_nibble);
+                break;
+            case 0x4:
+                uint8_t add_result = appstate->chip8_context.V[second_nibble] + appstate->chip8_context.V[third_nibble];
+                if (add_result < appstate->chip8_context.V[second_nibble] || add_result < appstate->chip8_context.V[third_nibble])
+                    appstate->chip8_context.V[15] = 1;   
+                else
+                    appstate->chip8_context.V[15] = 0;
+                snprintf(*message, 256, "V%x is set to the value of V%x plus the value of V%x",
+                         second_nibble, second_nibble, third_nibble);
+                break;
+            case 0x5:
+                if (appstate->chip8_context.V[third_nibble] > appstate->chip8_context.V[second_nibble])
+                    appstate->chip8_context.V[15] = 0;
+                else 
+                    appstate->chip8_context.V[15] = 1;
+                appstate->chip8_context.V[second_nibble] -= appstate->chip8_context.V[third_nibble];
+                snprintf(*message, 256, "V%x is set to the value of V%x - V%x",
+                         second_nibble, second_nibble, third_nibble);
+                break;
+            case 0x6:
+                if ((appstate->chip8_context.V[second_nibble] & 0x1) == 0x1) {
+                    appstate->chip8_context.V[15] = 1;
+                }
+                else {
+                    appstate->chip8_context.V[15] = 0;
+                }
+                appstate->chip8_context.V[second_nibble] >>= 1;
+                snprintf(*message, 256, "Right shift V%x", second_nibble);
+                break;
+            case 0x7:
+                if (appstate->chip8_context.V[second_nibble] > appstate->chip8_context.V[third_nibble])
+                    appstate->chip8_context.V[15] = 0;
+                else
+                    appstate->chip8_context.V[15] = 1;
+                appstate->chip8_context.V[second_nibble] = appstate->chip8_context.V[third_nibble] - appstate->chip8_context.V[second_nibble];
+                snprintf(*message, 256, "V%x is set to the value of V%x plus the value of V%x",
+                         second_nibble, third_nibble, second_nibble);
+                break;
+            case 0xE:
+                if ((appstate->chip8_context.V[second_nibble] & 0x80) == 0x80) {
+                    appstate->chip8_context.V[15] = 1;
+                }
+                else {
+                    appstate->chip8_context.V[15] = 0;
+                }
+                appstate->chip8_context.V[second_nibble] <<= 1;
+                snprintf(*message, 256, "Left shift V%x", second_nibble);
+                break;
+            default:
+                snprintf(*message, 256, "Not an instruction");
+        }
+        break;
     case 0x9:
         if (appstate->chip8_context.V[second_nibble] != appstate->chip8_context.V[third_nibble])
         {
@@ -414,6 +487,11 @@ void decode_instruction(uint16_t instruction, char **message,
                          second_nibble);
                 break;
             }
+            break;
+        case 0x1E:
+            appstate->chip8_context.I += appstate->chip8_context.V[second_nibble];
+            snprintf(*message, 256, "Set I = I + V%x",
+                     second_nibble);
             break;
         default:
             snprintf(*message, 256, "Not an instruction");
