@@ -11,7 +11,7 @@ Create a fully functional CHIP-8 emulator using C and the SDL3 library
 
 Now, [Corax+ opcode test](https://github.com/Timendus/chip8-test-suite/tree/main#corax-opcode-test) is supported:
 
-![Running Corax+ opcode test](.images/running_corax+_opcode_test.gif)
+![Running Corax+ opcode test](./images/running_corax+_opcode_test.gif)
 
 ## 0.0.2
 
