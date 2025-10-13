@@ -11,7 +11,7 @@
 #define RAM_SIZE 4096
 #define ROM_MAX_SIZE 3584
 #define ROM_GAME_ADDRESS_START 0x200
-#define STEP_RATE_IN_MILLISECONDS 20
+#define STEP_RATE_IN_MILLISECONDS 7
 #define STEP_TIMERS_UPDATE_IN_MILLISECONDS 17
 #define PIXEL_SIZE 20
 #define CHIP8_DISPLAY_WIDTH 64
@@ -279,8 +279,6 @@ void decode_instruction(uint16_t instruction, char **message,
             appstate->chip8_context.PC = stack_pop_instruction(appstate);
             snprintf(*message, 256, "Returning from a subroutine");
             break;
-        default:
-            snprintf(*message, 256, "Not an instruction");
         }
         break;
     case 0x1:
@@ -360,11 +358,12 @@ void decode_instruction(uint16_t instruction, char **message,
                          second_nibble, second_nibble, third_nibble);
                 break;
             case 0x4:
-                uint8_t add_result = appstate->chip8_context.V[second_nibble] + appstate->chip8_context.V[third_nibble];
-                if (add_result < appstate->chip8_context.V[second_nibble] || add_result < appstate->chip8_context.V[third_nibble])
+                uint16_t add_result = appstate->chip8_context.V[second_nibble] + appstate->chip8_context.V[third_nibble];
+                if (add_result > 255)
                     appstate->chip8_context.V[15] = 1;   
                 else
                     appstate->chip8_context.V[15] = 0;
+                appstate->chip8_context.V[second_nibble] = (uint8_t)add_result;
                 snprintf(*message, 256, "V%x is set to the value of V%x plus the value of V%x",
                          second_nibble, second_nibble, third_nibble);
                 break;
@@ -406,8 +405,6 @@ void decode_instruction(uint16_t instruction, char **message,
                 appstate->chip8_context.V[second_nibble] <<= 1;
                 snprintf(*message, 256, "Left shift V%x", second_nibble);
                 break;
-            default:
-                snprintf(*message, 256, "Not an instruction");
         }
         break;
     case 0x9:
@@ -450,10 +447,35 @@ void decode_instruction(uint16_t instruction, char **message,
             fourth_nibble, second_nibble, third_nibble);
         break;
     case 0xE:
-        // TODO
-        snprintf(
-            *message, 256,
-            "Not implemented yet!");
+        switch (third_and_fourth_nibbles)
+        {
+        case 0x9E:
+            uint8_t key_scancode = appstate->chip8_context.keyboard_keys[second_nibble];
+            if (appstate->keyboard_state[key_scancode]) {
+                appstate->chip8_context.PC += 2;
+                snprintf(
+                    *message,
+                    256,
+                    "Key %zx is pressed, next instruction skipped.",
+                    key_scancode
+                );
+                break;
+            }
+            break;
+        case 0xA1:
+            key_scancode = appstate->chip8_context.keyboard_keys[second_nibble];
+            if (!appstate->keyboard_state[key_scancode]) {
+                appstate->chip8_context.PC += 2;
+                snprintf(
+                    *message,
+                    256,
+                    "Key %zx is NOT pressed, next instruction skipped.",
+                    key_scancode
+                );
+                break;
+            }
+            break;
+        }
         break;
     case 0xF:
         switch (third_and_fourth_nibbles)
@@ -488,13 +510,49 @@ void decode_instruction(uint16_t instruction, char **message,
                 break;
             }
             break;
+        case 0x33:
+            // We need to split VX number to three decimal digits
+            uint8_t v_number = appstate->chip8_context.V[second_nibble];
+            uint8_t number;
+            uint8_t decimal_base = 10;
+            for (int offset = 2; offset >= 0; offset--) {
+                number = v_number % decimal_base;
+                v_number /= decimal_base;
+                appstate->chip8_context.RAM[appstate->chip8_context.I + offset] = number;
+            }
+            snprintf(
+                *message,
+                256,
+                "Store BCD representation of V%x in memory locations I, I+1, and I+2",
+                second_nibble
+            );
+            break;
+        case 0x55:
+            for (int register_number = 0; register_number <= second_nibble; register_number++) {
+                appstate->chip8_context.RAM[appstate->chip8_context.I + register_number] = appstate->chip8_context.V[register_number]; 
+            }
+            snprintf(
+                *message,
+                256,
+                "Store registers V0 through V%x in memory starting at location I",
+                second_nibble
+            );
+            break;
+        case 0x65:
+            for (int register_number = 0; register_number <= second_nibble; register_number++) {
+                appstate->chip8_context.V[register_number] = appstate->chip8_context.RAM[appstate->chip8_context.I + register_number]; 
+            }
+            snprintf(
+                *message,
+                256,
+                "Read registers V0 through V%x from memory starting at location I",
+                second_nibble
+            );
+            break;
         case 0x1E:
             appstate->chip8_context.I += appstate->chip8_context.V[second_nibble];
             snprintf(*message, 256, "Set I = I + V%x",
                      second_nibble);
-            break;
-        default:
-            snprintf(*message, 256, "Not an instruction");
         }
         break;
     default:
@@ -575,7 +633,7 @@ SDL_AppResult SDL_AppIterate(void *appstate)
         // do emulator step
         uint16_t cur_instruction = fetch_instruction(as);
         decode_instruction(cur_instruction, &message, as);
-        printf("%04x: %s\n", cur_instruction, message);
+        // printf("%04x: %s\n", cur_instruction, message);
         if (as->need_redraw)
         {
             draw_screen(as);

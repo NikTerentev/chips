@@ -4,6 +4,15 @@ Create a fully functional CHIP-8 emulator using C and the SDL3 library
 
 # CHANGELOG
 
+## 0.0.3
+
+- Add support of FX33, FX55, FX65, ....
+- Fix bugs with existed opcodes.
+
+Now, [Corax+ opcode test](https://github.com/Timendus/chip8-test-suite/tree/main#corax-opcode-test) is supported:
+
+![Running Corax+ opcode test](.images/running_corax+_opcode_test.gif)
+
 ## 0.0.2
 
 Add support of few new opcodes - finished 8xyN, and some single opcodes from other categories.
