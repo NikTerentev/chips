@@ -4,6 +4,14 @@ Create a fully functional CHIP-8 emulator using C and the SDL3 library
 
 # CHANGELOG
 
+## 0.0.4
+
+Fix 8x.. opcodes.
+
+Now, [Flags test](https://github.com/Timendus/chip8-test-suite/tree/main?tab=readme-ov-file#flags-test) is supported:
+
+![Running Flags test](./images/running_flags_test.gif)
+
 ## 0.0.3
 
 - Add support of FX33, FX55, FX65, ....
