@@ -148,6 +148,36 @@ void read_rom_file(int argc, char *argv[], AppState *appstate)
     fclose(fp);
 }
 
+uint8_t DEFALT_FONT[16][5] = {
+{0xF0, 0x90, 0x90, 0x90, 0xF0}, // 0
+{0x20, 0x60, 0x20, 0x20, 0x70}, // 1
+{0xF0, 0x10, 0xF0, 0x80, 0xF0}, // 2
+{0xF0, 0x10, 0xF0, 0x10, 0xF0}, // 3
+{0x90, 0x90, 0xF0, 0x10, 0x10}, // 4
+{0xF0, 0x80, 0xF0, 0x10, 0xF0}, // 5
+{0xF0, 0x80, 0xF0, 0x90, 0xF0}, // 6
+{0xF0, 0x10, 0x20, 0x40, 0x40}, // 7
+{0xF0, 0x90, 0xF0, 0x90, 0xF0}, // 8
+{0xF0, 0x90, 0xF0, 0x10, 0xF0}, // 9
+{0xF0, 0x90, 0xF0, 0x90, 0x90}, // A
+{0xE0, 0x90, 0xE0, 0x90, 0xE0}, // B
+{0xF0, 0x80, 0x80, 0x80, 0xF0}, // C
+{0xE0, 0x90, 0x90, 0x90, 0xE0}, // D
+{0xF0, 0x80, 0xF0, 0x80, 0xF0}, // E
+{0xF0, 0x80, 0xF0, 0x80, 0x80}  // F
+};
+
+void load_font(AppState *appstate)
+{
+    uint8_t offset = 0x0;
+    for (size_t letter_number = 0; letter_number <= 15; letter_number++) {
+        for (size_t letter_byte_index = 0; letter_byte_index <= 4; letter_byte_index++) {
+            uint8_t letter_byte = DEFALT_FONT[letter_number][letter_byte_index];
+            appstate->chip8_context.RAM[0x000 + offset++] = letter_byte;
+        }
+    }
+}
+
 /* This function runs once at startup. */
 SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[])
 {
@@ -202,6 +232,7 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[])
     }
 
     read_rom_file(argc, argv, as);
+    load_font(as);
 
     as->last_step = SDL_GetTicks();
     as->last_timer_update = SDL_GetTicks();
@@ -525,6 +556,11 @@ void decode_instruction(uint16_t instruction, char **message,
                          second_nibble);
                 break;
             }
+            break;
+        case 0x29:
+            appstate->chip8_context.I = 5 * appstate->chip8_context.V[second_nibble]; 
+            snprintf(*message, 256, "Point I to the %x character",
+                        second_nibble);
             break;
         case 0x33:
             // We need to split VX number to three decimal digits
