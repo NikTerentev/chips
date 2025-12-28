@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stddef.h>
 
 #define RAM_SIZE 4096
 #define ROM_MAX_SIZE 3584
@@ -192,8 +193,6 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[])
         return SDL_APP_FAILURE;
     }
 
-    SDL_ResumeAudioStreamDevice(as->stream);
-
     if (!SDL_CreateWindowAndRenderer("examples/emulator/chip-8", SDL_WINDOW_WIDTH,
                                      SDL_WINDOW_HEIGHT, 0, &as->window,
                                      &as->renderer))
@@ -344,16 +343,19 @@ void decode_instruction(uint16_t instruction, char **message,
                 break;
             case 0x1:
                 appstate->chip8_context.V[second_nibble] |= appstate->chip8_context.V[third_nibble]; 
+                appstate->chip8_context.V[15] = 0;
                 snprintf(*message, 256, "V%x is set to the bitwise OR of V%x and V%x",
                          second_nibble, second_nibble, third_nibble);
                 break;
             case 0x2:
                 appstate->chip8_context.V[second_nibble] &= appstate->chip8_context.V[third_nibble]; 
+                appstate->chip8_context.V[15] = 0;
                 snprintf(*message, 256, "V%x is set to the bitwise AND of V%x and V%x",
                          second_nibble, second_nibble, third_nibble);
                 break;
             case 0x3:
                 appstate->chip8_context.V[second_nibble] ^= appstate->chip8_context.V[third_nibble]; 
+                appstate->chip8_context.V[15] = 0;
                 snprintf(*message, 256, "V%x is set to the bitwise XOR of V%x and V%x",
                          second_nibble, second_nibble, third_nibble);
                 break;
@@ -429,6 +431,11 @@ void decode_instruction(uint16_t instruction, char **message,
         snprintf(*message, 256, "Set address %x to register I",
                  second_third_and_fourth_nibbles);
         break;
+    case 0xB:
+        appstate->chip8_context.PC = second_third_and_fourth_nibbles + appstate->chip8_context.V[second_nibble];
+        snprintf(*message, 256, "Jump to address %x + value from V%x",
+                 second_third_and_fourth_nibbles, second_nibble);
+        break;
     case 0xD:
         uint16_t x_coord = appstate->chip8_context.V[second_nibble];
         uint16_t y_coord = appstate->chip8_context.V[third_nibble];
@@ -456,7 +463,8 @@ void decode_instruction(uint16_t instruction, char **message,
         switch (third_and_fourth_nibbles)
         {
         case 0x9E:
-            uint8_t key_scancode = appstate->chip8_context.keyboard_keys[second_nibble];
+            uint8_t second_nibble_value = appstate->chip8_context.V[second_nibble];
+            uint8_t key_scancode = appstate->chip8_context.keyboard_keys[second_nibble_value];
             if (appstate->keyboard_state[key_scancode]) {
                 appstate->chip8_context.PC += 2;
                 snprintf(
@@ -469,7 +477,8 @@ void decode_instruction(uint16_t instruction, char **message,
             }
             break;
         case 0xA1:
-            key_scancode = appstate->chip8_context.keyboard_keys[second_nibble];
+            second_nibble_value = appstate->chip8_context.V[second_nibble];
+            key_scancode = appstate->chip8_context.keyboard_keys[second_nibble_value];
             if (!appstate->keyboard_state[key_scancode]) {
                 appstate->chip8_context.PC += 2;
                 snprintf(
@@ -504,6 +513,7 @@ void decode_instruction(uint16_t instruction, char **message,
                 uint8_t cur_scancode = appstate->chip8_context.keyboard_keys[key_index];
                 if (appstate->keyboard_state[cur_scancode]) {
                     snprintf(*message, 256, "Key %zx is pressed, number putted in V%x.", key_index, second_nibble);
+                    SDL_ResetKeyboard();
                     appstate->chip8_context.V[second_nibble] = (uint8_t)key_index;
                     is_key_pressed = true;
                     break;
@@ -534,8 +544,13 @@ void decode_instruction(uint16_t instruction, char **message,
             );
             break;
         case 0x55:
-            for (int register_number = 0; register_number <= second_nibble; register_number++) {
-                appstate->chip8_context.RAM[appstate->chip8_context.I + register_number] = appstate->chip8_context.V[register_number]; 
+            if (second_nibble == 0) {
+                appstate->chip8_context.RAM[appstate->chip8_context.I++] = appstate->chip8_context.V[0]; 
+            }
+            else {
+                for (int register_number = 0; register_number <= second_nibble; register_number++) {
+                    appstate->chip8_context.RAM[appstate->chip8_context.I++] = appstate->chip8_context.V[register_number]; 
+                }
             }
             snprintf(
                 *message,
@@ -545,8 +560,13 @@ void decode_instruction(uint16_t instruction, char **message,
             );
             break;
         case 0x65:
-            for (int register_number = 0; register_number <= second_nibble; register_number++) {
-                appstate->chip8_context.V[register_number] = appstate->chip8_context.RAM[appstate->chip8_context.I + register_number]; 
+            if (second_nibble == 0) {
+                appstate->chip8_context.V[0] = appstate->chip8_context.RAM[appstate->chip8_context.I++]; 
+            }
+            else {
+                for (int register_number = 0; register_number <= second_nibble; register_number++) {
+                    appstate->chip8_context.V[register_number] = appstate->chip8_context.RAM[appstate->chip8_context.I++]; 
+                }
             }
             snprintf(
                 *message,
@@ -631,6 +651,9 @@ SDL_AppResult SDL_AppIterate(void *appstate)
             }
             --as->chip8_context.sound_timer;
         }
+        else {
+            SDL_PauseAudioStreamDevice(as->stream);
+        }
         as->last_timer_update += STEP_TIMERS_UPDATE_IN_MILLISECONDS;
     }
 
@@ -639,7 +662,6 @@ SDL_AppResult SDL_AppIterate(void *appstate)
         // do emulator step
         uint16_t cur_instruction = fetch_instruction(as);
         decode_instruction(cur_instruction, &message, as);
-        // printf("%04x: %s\n", cur_instruction, message);
         if (as->need_redraw)
         {
             draw_screen(as);
