@@ -5,12 +5,15 @@ CFLAGS += $(shell pkg-config --cflags sdl3)
 TARGET = chips
 SRC = src/chips.c
 
-all: $(TARGET)
 
 $(TARGET): $(SRC)
 	$(CC) $(CFLAGS) $(SRC) -o $(TARGET) $(LDFLAGS)
 
+.PHONY: all clean test
+
+all: $(TARGET)
+
 clean:
 	rm -f $(TARGET)
 
-.PHONY: all clean
+test:
