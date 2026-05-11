@@ -1,21 +1,13 @@
 ---
 BasedOnStyle: LLVM
 Language: C
-
 ColumnLimit: 80
-
-IndentWidth: 4
+IndentWidth: 2
 UseTab: Never
-
-AlignEscapedNewlines: Left
-AllowShortFunctionsOnASingleLine: Empty
-IndentPPDirectives: AfterHash
-PointerAlignment: Left
-
-AlignAfterOpenBracket: true
-BreakAfterOpenBracketFunction: true
-BreakBeforeCloseBracketFunction: true
-BreakAfterOpenBracketBracedList: true
-BreakBeforeCloseBracketBracedList: true
-BreakAfterOpenBracketIf: true
-BreakBeforeCloseBracketIf: true
+PointerAlignment: Right
+BreakBeforeBraces: Linux
+AlignConsecutiveDeclarations: AcrossEmptyLinesAndComments
+AlignConsecutiveMacros: AcrossEmptyLinesAndComments
+AlignArrayOfStructures: Left
+AlignTrailingComments: Always
+AlignConsecutiveAssignments: AcrossEmptyLinesAndComments

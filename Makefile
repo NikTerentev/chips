@@ -1,5 +1,5 @@
 CC = clang
-CFLAGS = -Wall -Wextra -g -std=c99
+CFLAGS = -Wall -Wextra -g -std=c99 -Wdeclaration-after-statement
 LDFLAGS = $(shell pkg-config --libs sdl3)
 CFLAGS += $(shell pkg-config --cflags sdl3)
 TARGET = chips
