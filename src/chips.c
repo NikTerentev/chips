@@ -12,7 +12,7 @@
 #define RAM_SIZE                           4096
 #define ROM_MAX_SIZE                       3584
 #define ROM_GAME_ADDRESS_START             0x200
-#define STEP_RATE_IN_MILLISECONDS          3
+#define STEP_RATE_IN_MILLISECONDS          1
 #define STEP_TIMERS_UPDATE_IN_MILLISECONDS 17
 #define PIXEL_SIZE                         20
 #define CHIP8_DISPLAY_WIDTH                64
@@ -390,6 +390,8 @@ void decode_instruction(uint16_t instruction, char **message,
                      second_nibble, second_nibble, third_nibble);
             break;
         case 0x6:
+            appstate->chip8_context.V[second_nibble] =
+                appstate->chip8_context.V[third_nibble];
             uint8_t least_significant_bit;
             if ((appstate->chip8_context.V[second_nibble] & 0x1) == 0x1) {
                 least_significant_bit = 1;
@@ -415,6 +417,8 @@ void decode_instruction(uint16_t instruction, char **message,
                      second_nibble, third_nibble, second_nibble);
             break;
         case 0xE:
+            appstate->chip8_context.V[second_nibble] =
+                appstate->chip8_context.V[third_nibble];
             uint8_t most_significant_bit;
             if ((appstate->chip8_context.V[second_nibble] & 0x80) == 0x80) {
                 most_significant_bit = 1;
@@ -442,8 +446,8 @@ void decode_instruction(uint16_t instruction, char **message,
                  second_third_and_fourth_nibbles);
         break;
     case 0xB:
-        appstate->chip8_context.PC = second_third_and_fourth_nibbles +
-                                     appstate->chip8_context.V[second_nibble];
+        appstate->chip8_context.PC =
+            second_third_and_fourth_nibbles + appstate->chip8_context.V[0];
         snprintf(*message, 256, "Jump to address %x + value from V%x",
                  second_third_and_fourth_nibbles, second_nibble);
         break;

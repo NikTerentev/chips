@@ -5,7 +5,6 @@ CFLAGS += $(shell pkg-config --cflags sdl3)
 TARGET = chips
 SRC = src/chips.c
 
-
 $(TARGET): $(SRC)
 	$(CC) $(CFLAGS) $(SRC) -o $(TARGET) $(LDFLAGS)
 
