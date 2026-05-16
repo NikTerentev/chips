@@ -1,0 +1,14 @@
+asynth
+ASYNTH
+checkmake
+Corax
+cppdbg
+Octojam
+sassets
+stdint
+Terentev
+terentevnikita
+Wdeclaration
+Wextra
+xtrgamr
+zeroa

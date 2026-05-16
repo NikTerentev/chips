@@ -21,6 +21,11 @@ repos:
           --maxkb=1000,
         ]
       - id: end-of-file-fixer
+      - id: file-contents-sorter
+        files: "\\.vscode/project-related-words\\.txt"
+        args: [
+          --ignore-case,
+        ]
 
   - repo: https://github.com/igorshubovych/markdownlint-cli
     rev: v0.48.0
@@ -47,3 +52,8 @@ repos:
     rev: 0.2.2
     hooks:
       - id: checkmake
+
+  - repo: https://github.com/streetsidesoftware/cspell-cli
+    rev: v10.0.0
+    hooks:
+      - id: cspell
