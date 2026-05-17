@@ -12,7 +12,7 @@
 #define RAM_SIZE                           4096
 #define ROM_MAX_SIZE                       3584
 #define ROM_GAME_ADDRESS_START             0x200
-#define STEP_RATE_IN_MILLISECONDS          1
+#define STEP_RATE_IN_MILLISECONDS          2
 #define STEP_TIMERS_UPDATE_IN_MILLISECONDS 17
 #define PIXEL_SIZE                         20
 #define CHIP8_DISPLAY_WIDTH                64
@@ -220,11 +220,11 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[])
 }
 
 /* This function runs when a new event (mouse input, keypresses, etc) occurs. */
-SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *event)
+SDL_AppResult SDL_AppEvent(SDL_UNUSED void *appstate, SDL_Event *event)
 {
     if (event->type == SDL_EVENT_QUIT) {
-        return SDL_APP_SUCCESS; /* end the program, reporting success to the OS.
-                                 */
+        /* end the program, reporting success to the OS. */
+        return SDL_APP_SUCCESS;
     }
     return SDL_APP_CONTINUE;
 }
@@ -452,19 +452,29 @@ void decode_instruction(uint16_t instruction, char **message,
                  second_third_and_fourth_nibbles, second_nibble);
         break;
     case 0xD:
-        uint16_t x_coord = appstate->chip8_context.V[second_nibble];
-        uint16_t y_coord = appstate->chip8_context.V[third_nibble];
-        uint8_t  n       = fourth_nibble;
+        uint16_t x_coord =
+            appstate->chip8_context.V[second_nibble] % CHIP8_DISPLAY_WIDTH;
+        uint16_t y_coord =
+            appstate->chip8_context.V[third_nibble] % CHIP8_DISPLAY_HEIGHT;
+        uint8_t n                      = fourth_nibble;
         appstate->chip8_context.V[0xF] = 0;
 
-        for (short y = 0; y < n; y++) {
+        for (size_t y = 0; y < n; y++) {
+            if (y_coord + y >= CHIP8_DISPLAY_HEIGHT)
+                break;
             uint8_t sprite_data =
                 appstate->chip8_context.RAM[appstate->chip8_context.I + y];
             uint64_t *display_row =
                 &appstate->chip8_context.display_cells[y_coord + y];
             for (short x = 0; x < 8; x++) {
-                int sprite_bit_value = (sprite_data >> (7 - x)) & 0x1;
-                int bit_pos          = CHIP8_DISPLAY_WIDTH - 1 - (x_coord + x);
+                if (x_coord + x >= CHIP8_DISPLAY_WIDTH)
+                    break;
+                uint8_t sprite_bit_value = (sprite_data >> (7 - x)) & 0x1;
+                uint8_t bit_pos = CHIP8_DISPLAY_WIDTH - 1 - (x_coord + x);
+                uint8_t display_row_bit =
+                    (uint8_t)(*display_row >> bit_pos) & 0x1;
+                if (sprite_bit_value == 1 && display_row_bit == 1)
+                    appstate->chip8_context.V[0xF] = 1;
                 *display_row ^= ((uint64_t)sprite_bit_value << bit_pos);
             }
         }
@@ -695,7 +705,7 @@ SDL_AppResult SDL_AppIterate(void *appstate)
 }
 
 /* This function runs once at shutdown. */
-void SDL_AppQuit(void *appstate, SDL_AppResult result)
+void SDL_AppQuit(void *appstate, SDL_UNUSED SDL_AppResult result)
 {
     if (appstate != NULL) {
         AppState *as = (AppState *)appstate;

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.0.5
+
+Add collision tracking
+
+Now,
+[Quirks test](https://github.com/Timendus/chip8-test-suite#quirks-test)
+is supported:
+
+![Running Quirks test](../images/running_quirks_test.png)
+
 ## 0.0.4
 
 Fix 8x.. opcodes.

@@ -7,13 +7,5 @@
         "sdl_events.h": "c",
         "string.h": "c",
         "sdl_filesystem.h": "c"
-    },
-    "makefile.configureOnOpen": false,
-    "makefile.launchConfigurations": [
-        {
-            "cwd": "/Users/terentevnikita/Documents/programming/self/chips",
-            "binaryPath": "/Users/terentevnikita/Documents/programming/self/chips/chips",
-            "binaryArgs": []
-        }
-    ]
+    }
 }
