@@ -1,4 +1,5 @@
-#define SDL_MAIN_USE_CALLBACKS 1 /* use the callbacks instead of main() */
+/* Use the callbacks instead of main() */
+#define SDL_MAIN_USE_CALLBACKS 1
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
 #include <errno.h>
@@ -9,224 +10,297 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define ROM_GAME_ADDRESS_START             0x200
 #define RAM_SIZE                           4096
 #define ROM_MAX_SIZE                       3584
-#define ROM_GAME_ADDRESS_START             0x200
-#define STEP_RATE_IN_MILLISECONDS          2
 #define STEP_TIMERS_UPDATE_IN_MILLISECONDS 17
-#define PIXEL_SIZE                         20
 #define CHIP8_DISPLAY_WIDTH                64
 #define CHIP8_DISPLAY_HEIGHT               32
+#define PIXEL_SIZE                         20
+#define FONT_SIZE                          16
+#define STEP_RATE_IN_MILLISECONDS          2
+#define FONT_BYTES                         5
+
 #define CHIP8_DISPLAY_MATRIX_SIZE (CHIP8_DISPLAY_WIDTH * CHIP8_DISPLAY_HEIGHT)
-#define SDL_WINDOW_WIDTH          (PIXEL_SIZE * CHIP8_DISPLAY_WIDTH)
 #define SDL_WINDOW_HEIGHT         (PIXEL_SIZE * CHIP8_DISPLAY_HEIGHT)
+#define SDL_WINDOW_WIDTH          (PIXEL_SIZE * CHIP8_DISPLAY_WIDTH)
 
 /*
- * CHIP-8 instructions are divided into broad categories by the first “nibble”,
- * or “half-byte”, which is the first hexadecimal number.
+ * Get first nibble from instruction.
+ *
+ * CHIP-8 instructions are divided into broad categories by the first "nibble",
+ * or "half-byte", which is the first hexadecimal number.
  */
-#define GET_FIRST_NIBBLE(instruction)            ((instruction & 0xF000) >> 12)
+#define GET_FIRST_NIBBLE(instruction) ((instruction & 0xF000) >> 12)
 /*
- * The second nibble. Used to look up one of the 16 registers (VX) from V0
+ * Get second, third and fourth nibbles (a 12-bit immediate memory address).
+ */
+#define GET_SECOND_THIRD_AND_FOURTH_NIBBLES(instruction) (instruction & 0xFFF)
+/*
+ * Get second nibble - used to look up one of the 16 registers (VX) from V0
  * through VF.
  */
 #define GET_SECOND_NIBBLE(instruction)           ((instruction & 0xF00) >> 8)
 /*
- * The third nibble. Also used to look up one of the 16 registers (VY) from V0
+ * Get third nibble - used to look up one of the 16 registers (VY) from V0
  * through VF.
  */
 #define GET_THIRD_NIBBLE(instruction)            ((instruction & 0xF0) >> 4)
 /*
- * The fourth nibble. A 4-bit number.
- */
-#define GET_FOURTH_NIBBLE(instruction)           (instruction & 0xF)
-/*
- * The second byte (third and fourth nibbles). An 8-bit immediate number.
+ * Get second byte (third and fourth nibbles) - an 8-bit immediate number.
  */
 #define GET_THIRD_AND_FORTH_NIBBLES(instruction) (instruction & 0xFF)
 /*
- * The second, third and fourth nibbles. A 12-bit immediate memory address.
+ * Get fourth nibble - a 4-bit number.
  */
-#define GET_SECOND_THIRD_AND_FOURTH_NIBBLES(instruction) (instruction & 0xFFF)
+#define GET_FOURTH_NIBBLE(instruction)           (instruction & 0xF)
 
 typedef struct {
-    /* Memory */
-    uint8_t  RAM[RAM_SIZE];
-    /* Points at the current instruction in memory */
-    uint16_t PC;
-    /* Points at locations in memory */
-    uint16_t I;
-    /* Stack */
-    uint16_t stack[16];
-    /* Stack pointer */
-    uint8_t  SP;
-    /* Decremented at a rate of 60 Hz (60 times per second) until it reaches 0
-     */
-    uint8_t  delay_timer;
-    /* Sound timer which functions like the delay timer, but which also
-       gives off a beeping sound as long as it’s not 0 */
-    uint8_t  sound_timer;
     /* 64 x 32 black and white screen cells */
-    uint64_t display_cells[CHIP8_DISPLAY_MATRIX_SIZE / 64U];
-    /* General-purpose variable registers numbered 0 through F hexadecimal,
-       ie. 0 through 15 in decimal, called V0 through VF */
-    uint8_t  V[16];
-    /* Keyboard mapping
-       Index of button - Button of real keyboard */
-    uint8_t  keyboard_keys[16];
+    Uint64 display_cells[CHIP8_DISPLAY_MATRIX_SIZE / 64U];
+    /*
+    Keyboard mapping
+    Index of button - Button of real keyboard
+    */
+    Uint8  keyboard_keys[16];
+    /* Memory */
+    Uint8  RAM[RAM_SIZE];
+    /*
+    Decremented at a rate of 60 Hz (60 times per second) until it reaches 0
+    */
+    Uint8  delay_timer;
+    /*
+    Sound timer which functions like the delay timer, but which also
+    gives off a beeping sound as long as it’s not 0
+    */
+    Uint8  sound_timer;
+    /* Stack */
+    Uint16 stack[16];
+    /*
+    General-purpose variable registers numbered 0 through F hexadecimal,
+    ie. 0 through 15 in decimal, called V0 through VF
+    */
+    Uint8  V[16];
+    /* Points at the current instruction in memory */
+    Uint16 PC;
+    /* Stack pointer */
+    Uint8  SP;
+    /* Points at locations in memory */
+    Uint16 I;
 } CHIP8Context;
 
 typedef struct {
-    SDL_Window      *window;
-    SDL_Renderer    *renderer;
-    SDL_AudioStream *stream;
-    /* TODO: Maybe move audio fields to another struct */
-    Uint8           *wav_data;
-    Uint32           wav_data_len;
-    CHIP8Context     chip8_context;
-    bool             need_redraw;
-    Uint64           last_step;
     Uint64           last_timer_update;
     const bool      *keyboard_state;
+    CHIP8Context     chip8_context;
+    Uint32           wav_data_len;
+    bool             need_redraw;
+    Uint64           last_step;
+    SDL_Renderer    *renderer;
+    Uint8           *wav_data;
+    SDL_Window      *window;
+    SDL_AudioStream *stream;
 } AppState;
 
-const uint8_t keys[] = {
+const Uint8 keys[] = {
     SDL_SCANCODE_X, SDL_SCANCODE_1, SDL_SCANCODE_2, SDL_SCANCODE_3,
     SDL_SCANCODE_Q, SDL_SCANCODE_W, SDL_SCANCODE_E, SDL_SCANCODE_A,
     SDL_SCANCODE_S, SDL_SCANCODE_D, SDL_SCANCODE_Z, SDL_SCANCODE_C,
     SDL_SCANCODE_4, SDL_SCANCODE_R, SDL_SCANCODE_F, SDL_SCANCODE_V,
 };
 
-void read_rom_file(int argc, char *argv[], AppState *appstate)
-{
-    char *rom_file_address = argv[2];
-    FILE *fp;
-
-    for (int i = 1; i < argc; i += 1) {
-        if ((strcmp(argv[i], "-r") == 0 || strcmp(argv[i], "--rom") == 0) &&
-            (i + 1) < argc) {
-            rom_file_address = argv[++i];
-        } else {
-            puts("You need to provide all correct program arguments!");
-        }
-    }
-
-    if ((fp = fopen(rom_file_address, "r")) == NULL) {
-        perror(rom_file_address);
-    }
-
-    /* Calculate file length */
-    fseek(fp, 0, SEEK_END);
-    int rom_file_size = ftell(fp);
-    rewind(fp);
-
-    if (rom_file_size > ROM_MAX_SIZE) {
-        puts("Your rom is too big for CHIP-8!");
-        fclose(fp);
-    }
-
-    fread(&appstate->chip8_context.RAM[0x200], 1, rom_file_size, fp);
-    fclose(fp);
-}
-
-uint8_t DEFALT_FONT[16][5] = {
-    {0xF0, 0x90, 0x90, 0x90, 0xF0}, /* 0 */
-    {0x20, 0x60, 0x20, 0x20, 0x70}, /* 1 */
-    {0xF0, 0x10, 0xF0, 0x80, 0xF0}, /* 2 */
-    {0xF0, 0x10, 0xF0, 0x10, 0xF0}, /* 3 */
-    {0x90, 0x90, 0xF0, 0x10, 0x10}, /* 4 */
-    {0xF0, 0x80, 0xF0, 0x10, 0xF0}, /* 5 */
-    {0xF0, 0x80, 0xF0, 0x90, 0xF0}, /* 6 */
-    {0xF0, 0x10, 0x20, 0x40, 0x40}, /* 7 */
-    {0xF0, 0x90, 0xF0, 0x90, 0xF0}, /* 8 */
-    {0xF0, 0x90, 0xF0, 0x10, 0xF0}, /* 9 */
-    {0xF0, 0x90, 0xF0, 0x90, 0x90}, /* A */
-    {0xE0, 0x90, 0xE0, 0x90, 0xE0}, /* B */
-    {0xF0, 0x80, 0x80, 0x80, 0xF0}, /* C */
-    {0xE0, 0x90, 0x90, 0x90, 0xE0}, /* D */
-    {0xF0, 0x80, 0xF0, 0x80, 0xF0}, /* E */
-    {0xF0, 0x80, 0xF0, 0x80, 0x80}  /* F */
+uint8_t DEFALT_FONT[FONT_SIZE][FONT_BYTES] = {
+    /* 0 */
+    {0xF0, 0x90, 0x90, 0x90, 0xF0},
+    /* 1 */
+    {0x20, 0x60, 0x20, 0x20, 0x70},
+    /* 2 */
+    {0xF0, 0x10, 0xF0, 0x80, 0xF0},
+    /* 3 */
+    {0xF0, 0x10, 0xF0, 0x10, 0xF0},
+    /* 4 */
+    {0x90, 0x90, 0xF0, 0x10, 0x10},
+    /* 5 */
+    {0xF0, 0x80, 0xF0, 0x10, 0xF0},
+    /* 6 */
+    {0xF0, 0x80, 0xF0, 0x90, 0xF0},
+    /* 7 */
+    {0xF0, 0x10, 0x20, 0x40, 0x40},
+    /* 8 */
+    {0xF0, 0x90, 0xF0, 0x90, 0xF0},
+    /* 9 */
+    {0xF0, 0x90, 0xF0, 0x10, 0xF0},
+    /* A */
+    {0xF0, 0x90, 0xF0, 0x90, 0x90},
+    /* B */
+    {0xE0, 0x90, 0xE0, 0x90, 0xE0},
+    /* C */
+    {0xF0, 0x80, 0x80, 0x80, 0xF0},
+    /* D */
+    {0xE0, 0x90, 0x90, 0x90, 0xE0},
+    /* E */
+    {0xF0, 0x80, 0xF0, 0x80, 0xF0},
+    /* F */
+    {0xF0, 0x80, 0xF0, 0x80, 0x80}
 };
 
-void load_font(AppState *appstate)
+/*
+ * Initialize SDL app.
+ */
+bool sdl_app_init(void)
 {
-    uint8_t offset = 0x0;
-    for (size_t letter_number = 0; letter_number <= 15; letter_number++) {
-        for (size_t letter_byte_index = 0; letter_byte_index <= 4;
-             letter_byte_index++) {
-            uint8_t letter_byte = DEFALT_FONT[letter_number][letter_byte_index];
-            appstate->chip8_context.RAM[0x000 + offset++] = letter_byte;
-        }
-    }
-}
-
-/* This function runs once at startup. */
-SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[])
-{
-    char         *wav_path = NULL;
-    SDL_AudioSpec spec;
-
     SDL_SetAppMetadata("Chip-8 Emulator", "0.0.1", "com.example.emulator");
-
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)) {
         SDL_Log("Couldn't initialize SDL: %s", SDL_GetError());
-        return SDL_APP_FAILURE;
+        return false;
     }
+    return true;
+}
 
-    AppState *as = (AppState *)SDL_calloc(1, sizeof(AppState));
-    if (!as) {
-        return SDL_APP_FAILURE;
-    }
-    *appstate            = as;
-
-    as->need_redraw      = false;
-    as->chip8_context.PC = ROM_GAME_ADDRESS_START;
-    memcpy(as->chip8_context.keyboard_keys, keys, sizeof(keys));
-    SDL_zeroa(as->chip8_context.display_cells);
-    int num_keys       = 0;
-    as->keyboard_state = SDL_GetKeyboardState(&num_keys);
+/*
+ * Load default WAV file from assets.
+ */
+bool sdl_load_wav(AppState *as, SDL_AudioSpec *spec)
+{
+    char *wav_path;
 
     SDL_asprintf(&wav_path, "%sassets/441634__xtrgamr__asynth.wav",
                  SDL_GetBasePath());
-    if (!SDL_LoadWAV(wav_path, &spec, &as->wav_data, &as->wav_data_len)) {
+    if (!SDL_LoadWAV(wav_path, spec, &as->wav_data, &as->wav_data_len)) {
         SDL_Log("Couldn't load .wav file: %s", SDL_GetError());
-        return SDL_APP_FAILURE;
+        return false;
     }
-
     SDL_free(wav_path);
+    return true;
+}
 
-    /* Create audio stream */
+/*
+ * Create SDL open audio device stream.
+ */
+bool sdl_create_audio_stream(AppState *as, SDL_AudioSpec *spec)
+{
     as->stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK,
-                                           &spec, NULL, NULL);
+                                           spec, NULL, NULL);
     if (!as->stream) {
         SDL_Log("Couldn't create audio stream: %s", SDL_GetError());
-        return SDL_APP_FAILURE;
+        return false;
     }
+    return true;
+}
 
+/*
+ * Create SDL window and renderer.
+ */
+bool sdl_create_window_and_renderer(AppState *as)
+{
     if (!SDL_CreateWindowAndRenderer("examples/emulator/chip-8",
                                      SDL_WINDOW_WIDTH, SDL_WINDOW_HEIGHT, 0,
                                      &as->window, &as->renderer)) {
         SDL_Log("Couldn't create window/renderer: %s", SDL_GetError());
-        return SDL_APP_FAILURE;
+        return false;
+    }
+    return true;
+}
+
+/*
+ * Read passed on startup rom file path.
+ */
+bool read_rom_file(int argc, char *argv[], AppState *appstate)
+{
+    const char *rom_file_path;
+    int         rom_file_size;
+    FILE       *fp;
+
+    if (argc > 1) {
+        rom_file_path = argv[1];
+    } else {
+        fputs("ERROR: Provide path to rom file\n", stderr);
+        return false;
     }
 
-    read_rom_file(argc, argv, as);
-    load_font(as);
+    if ((fp = fopen(rom_file_path, "r")) == NULL) {
+        fprintf(stderr, "ERROR: Could not read file %s: %s\n", rom_file_path,
+                strerror(errno));
+        return false;
+    }
 
+    /* Calculate file length */
+    fseek(fp, 0, SEEK_END);
+    rom_file_size = ftell(fp);
+    rewind(fp);
+
+    if (rom_file_size > ROM_MAX_SIZE) {
+        fprintf(stderr, "ERROR: Your rom is too big for CHIP-8 %s: %s\n",
+                rom_file_path, strerror(1));
+        fclose(fp);
+        return false;
+    }
+
+    fread(&appstate->chip8_context.RAM[0x200], 1, rom_file_size, fp);
+    fclose(fp);
+    return true;
+}
+
+/*
+ * Load CHIP8 standard font into RAM.
+ */
+void load_font(AppState *appstate)
+{
+    Uint8 offset;
+
+    offset = 0x0;
+    for (size_t letter_number = 0; letter_number < FONT_SIZE; letter_number++) {
+        for (size_t letter_byte_index = 0; letter_byte_index < FONT_BYTES;
+             letter_byte_index++) {
+            Uint8 letter_byte = DEFALT_FONT[letter_number][letter_byte_index];
+            appstate->chip8_context.RAM[0x0 + offset++] = letter_byte;
+        }
+    }
+}
+
+/*
+ * Initialize app, prepare AppState structure, keyboard buffer, audio stream.
+ */
+SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[])
+{
+    SDL_AudioSpec spec;
+    AppState     *as;
+
+    as                    = (AppState *)SDL_calloc(1, sizeof(AppState));
+    as->keyboard_state    = SDL_GetKeyboardState(NULL);
+    as->chip8_context.PC  = ROM_GAME_ADDRESS_START;
     as->last_step         = SDL_GetTicks();
     as->last_timer_update = SDL_GetTicks();
+    as->need_redraw       = false;
+    *appstate             = as;
+
+    memcpy(as->chip8_context.keyboard_keys, keys, sizeof(keys));
+    SDL_zeroa(as->chip8_context.display_cells);
+
+    if (!as || !sdl_app_init() || !sdl_load_wav(as, &spec) ||
+        !sdl_create_audio_stream(as, &spec) ||
+        !sdl_create_window_and_renderer(as) || !read_rom_file(argc, argv, as))
+        return SDL_APP_FAILURE;
+
+    load_font(as);
 
     return SDL_APP_CONTINUE;
 }
 
-/* This function runs when a new event (mouse input, keypresses, etc) occurs. */
+/*
+ * Handle new events: mouse input, keypresses, etc.
+ */
 SDL_AppResult SDL_AppEvent(SDL_UNUSED void *appstate, SDL_Event *event)
 {
-    if (event->type == SDL_EVENT_QUIT) {
-        /* end the program, reporting success to the OS. */
+    switch (event->type) {
+    case SDL_EVENT_QUIT:
         return SDL_APP_SUCCESS;
+    case SDL_EVENT_KEY_DOWN:
+        if (event->key.scancode == SDL_SCANCODE_ESCAPE)
+            return SDL_APP_SUCCESS;
+    default:
+        return SDL_APP_CONTINUE;
     }
-    return SDL_APP_CONTINUE;
 }
 
 uint16_t fetch_instruction(AppState *appstate)
@@ -659,17 +733,21 @@ void draw_screen(AppState *appstate)
     SDL_RenderPresent(appstate->renderer);
 }
 
-/* This function runs once per frame, and is the heart of the program. */
+/*
+ * Runs once per frame, and is the heart of the program.
+ */
 SDL_AppResult SDL_AppIterate(void *appstate)
 {
-    AppState    *as      = (AppState *)appstate;
-    const Uint64 now     = SDL_GetTicks();
+    const Uint64 ms_number = SDL_GetTicks();
+    AppState    *as;
 
-    char        *message = malloc(256);
+    as            = (AppState *)appstate;
+    char *message = malloc(256);
 
     SDL_PumpEvents();
 
-    if ((now - as->last_timer_update) >= STEP_TIMERS_UPDATE_IN_MILLISECONDS) {
+    if ((ms_number - as->last_timer_update) >=
+        STEP_TIMERS_UPDATE_IN_MILLISECONDS) {
         /* update timers */
         if (as->chip8_context.delay_timer > 0) {
             --as->chip8_context.delay_timer;
@@ -687,7 +765,7 @@ SDL_AppResult SDL_AppIterate(void *appstate)
         as->last_timer_update += STEP_TIMERS_UPDATE_IN_MILLISECONDS;
     }
 
-    while ((now - as->last_step) >= STEP_RATE_IN_MILLISECONDS) {
+    while ((ms_number - as->last_step) >= STEP_RATE_IN_MILLISECONDS) {
         /* do emulator step */
         uint16_t cur_instruction = fetch_instruction(as);
         decode_instruction(cur_instruction, &message, as);
@@ -704,7 +782,9 @@ SDL_AppResult SDL_AppIterate(void *appstate)
     return SDL_APP_CONTINUE;
 }
 
-/* This function runs once at shutdown. */
+/*
+ * Destroy renderer, window, clean allocations on exit.
+ */
 void SDL_AppQuit(void *appstate, SDL_UNUSED SDL_AppResult result)
 {
     if (appstate != NULL) {
