@@ -3,6 +3,7 @@ ASYNTH
 checkmake
 Corax
 cppdbg
+CXNN
 Octojam
 sassets
 stdint

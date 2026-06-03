@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.6
+
+- Rework IPF and FPS logic;
+- Add support of CXNN instruction;
+- Add `-d` flag to enable instruction logs;
+
 ## 0.0.5
 
 Add collision tracking

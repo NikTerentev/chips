@@ -1,27 +1,35 @@
-/* Use the callbacks instead of main() */
+/*
+ * Use the callbacks instead of main()
+ */
 #define SDL_MAIN_USE_CALLBACKS 1
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
+
 #include <errno.h>
+#include <math.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
-#define ROM_GAME_ADDRESS_START             0x200
-#define RAM_SIZE                           4096
-#define ROM_MAX_SIZE                       3584
-#define STEP_TIMERS_UPDATE_IN_MILLISECONDS 17
-#define CHIP8_DISPLAY_WIDTH                64
-#define CHIP8_DISPLAY_HEIGHT               32
-#define PIXEL_SIZE                         20
-#define FONT_SIZE                          16
-#define STEP_RATE_IN_MILLISECONDS          2
-#define FONT_BYTES                         5
+#define ROM_GAME_ADDRESS_START    0x200
+#define RAM_SIZE                  4096
+#define ROM_MAX_SIZE              3584
+// TODO: Add command line argument for changing IPF/FPS
+#define INSTRUCTIONS_PER_FRAME    11
+#define FRAMES_PER_SECOND         60
+#define CHIP8_DISPLAY_WIDTH       64
+#define CHIP8_DISPLAY_HEIGHT      32
+#define PIXEL_SIZE                20
+#define FONT_SIZE                 16
+#define FONT_BYTES                5
+#define NANOSECONDS_IN_SECOND     1000000000.0f
 
 #define CHIP8_DISPLAY_MATRIX_SIZE (CHIP8_DISPLAY_WIDTH * CHIP8_DISPLAY_HEIGHT)
+#define NANOSECONDS_PER_FRAME     (NANOSECONDS_IN_SECOND / FRAMES_PER_SECOND)
 #define SDL_WINDOW_HEIGHT         (PIXEL_SIZE * CHIP8_DISPLAY_HEIGHT)
 #define SDL_WINDOW_WIDTH          (PIXEL_SIZE * CHIP8_DISPLAY_WIDTH)
 
@@ -66,14 +74,16 @@ typedef struct {
     /* Memory */
     Uint8  RAM[RAM_SIZE];
     /*
-    Decremented at a rate of 60 Hz (60 times per second) until it reaches 0
-    */
+     * Decremented at a rate of 60 Hz (60 times per second) until it reaches 0
+     */
     Uint8  delay_timer;
     /*
     Sound timer which functions like the delay timer, but which also
     gives off a beeping sound as long as it’s not 0
     */
     Uint8  sound_timer;
+    /* Prevent rendering more than once per frame */
+    bool   vblank_sync;
     /* Stack */
     Uint16 stack[16];
     /*
@@ -90,12 +100,12 @@ typedef struct {
 } CHIP8Context;
 
 typedef struct {
-    Uint64           last_timer_update;
     const bool      *keyboard_state;
+    char            *rom_file_path;
     CHIP8Context     chip8_context;
     Uint32           wav_data_len;
     bool             need_redraw;
-    Uint64           last_step;
+    bool             enable_logs;
     SDL_Renderer    *renderer;
     Uint8           *wav_data;
     SDL_Window      *window;
@@ -203,24 +213,38 @@ bool sdl_create_window_and_renderer(AppState *as)
 }
 
 /*
- * Read passed on startup rom file path.
+ * Parse command line args.
  */
-bool read_rom_file(int argc, char *argv[], AppState *appstate)
+bool parse_command_line_args(int argc, char *argv[], AppState *appstate)
 {
-    const char *rom_file_path;
-    int         rom_file_size;
-    FILE       *fp;
-
-    if (argc > 1) {
-        rom_file_path = argv[1];
-    } else {
+    if (argc == 1) {
         fputs("ERROR: Provide path to rom file\n", stderr);
         return false;
     }
 
-    if ((fp = fopen(rom_file_path, "r")) == NULL) {
-        fprintf(stderr, "ERROR: Could not read file %s: %s\n", rom_file_path,
-                strerror(errno));
+    // TODO: Improve parsing, use `getopt()`.
+    for (int i = 1; i < argc; ++i) {
+        if (strcmp(argv[i], "-d") == 0) {
+            appstate->enable_logs = true;
+        } else {
+            appstate->rom_file_path = argv[i];
+        }
+    }
+
+    return true;
+}
+
+/*
+ * Read passed on startup rom file path.
+ */
+bool read_rom_file(AppState *appstate)
+{
+    int   rom_file_size;
+    FILE *fp;
+
+    if ((fp = fopen(appstate->rom_file_path, "r")) == NULL) {
+        fprintf(stderr, "ERROR: Could not read file %s: %s\n",
+                appstate->rom_file_path, strerror(errno));
         return false;
     }
 
@@ -231,7 +255,7 @@ bool read_rom_file(int argc, char *argv[], AppState *appstate)
 
     if (rom_file_size > ROM_MAX_SIZE) {
         fprintf(stderr, "ERROR: Your rom is too big for CHIP-8 %s: %s\n",
-                rom_file_path, strerror(1));
+                appstate->rom_file_path, strerror(1));
         fclose(fp);
         return false;
     }
@@ -266,20 +290,20 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[])
     SDL_AudioSpec spec;
     AppState     *as;
 
-    as                    = (AppState *)SDL_calloc(1, sizeof(AppState));
-    as->keyboard_state    = SDL_GetKeyboardState(NULL);
-    as->chip8_context.PC  = ROM_GAME_ADDRESS_START;
-    as->last_step         = SDL_GetTicks();
-    as->last_timer_update = SDL_GetTicks();
-    as->need_redraw       = false;
-    *appstate             = as;
+    as                   = (AppState *)SDL_calloc(1, sizeof(AppState));
+    as->keyboard_state   = SDL_GetKeyboardState(NULL);
+    as->chip8_context.PC = ROM_GAME_ADDRESS_START;
+    as->need_redraw      = false;
+    *appstate            = as;
 
     memcpy(as->chip8_context.keyboard_keys, keys, sizeof(keys));
     SDL_zeroa(as->chip8_context.display_cells);
+    srand(time(NULL));
 
     if (!as || !sdl_app_init() || !sdl_load_wav(as, &spec) ||
         !sdl_create_audio_stream(as, &spec) ||
-        !sdl_create_window_and_renderer(as) || !read_rom_file(argc, argv, as))
+        !sdl_create_window_and_renderer(as) ||
+        !parse_command_line_args(argc, argv, as) || !read_rom_file(as))
         return SDL_APP_FAILURE;
 
     load_font(as);
@@ -525,6 +549,11 @@ void decode_instruction(uint16_t instruction, char **message,
         snprintf(*message, 256, "Jump to address %x + value from V%x",
                  second_third_and_fourth_nibbles, second_nibble);
         break;
+    case 0xC:
+        Uint8 random_number = (rand() % 255) & third_and_fourth_nibbles;
+        appstate->chip8_context.V[second_nibble] = random_number;
+        snprintf(*message, 256, "Generate random number: %x", random_number);
+        break;
     case 0xD:
         uint16_t x_coord =
             appstate->chip8_context.V[second_nibble] % CHIP8_DISPLAY_WIDTH;
@@ -734,50 +763,57 @@ void draw_screen(AppState *appstate)
 }
 
 /*
- * Runs once per frame, and is the heart of the program.
+ * Process single iteration of program's main loop.
  */
 SDL_AppResult SDL_AppIterate(void *appstate)
 {
-    const Uint64 ms_number = SDL_GetTicks();
-    AppState    *as;
+    Uint64    start_ticks, end_ticks;
+    float     elapsed_ns;
+    AppState *as;
 
     as            = (AppState *)appstate;
     char *message = malloc(256);
 
     SDL_PumpEvents();
+    start_ticks = SDL_GetTicksNS();
 
-    if ((ms_number - as->last_timer_update) >=
-        STEP_TIMERS_UPDATE_IN_MILLISECONDS) {
-        /* update timers */
-        if (as->chip8_context.delay_timer > 0) {
-            --as->chip8_context.delay_timer;
+    if (as->chip8_context.delay_timer > 0)
+        --as->chip8_context.delay_timer;
+    if (as->chip8_context.sound_timer > 0) {
+        SDL_ResumeAudioStreamDevice(as->stream);
+        if (SDL_GetAudioStreamQueued(as->stream) < (int)as->wav_data_len) {
+            SDL_PutAudioStreamData(as->stream, as->wav_data, as->wav_data_len);
         }
-        if (as->chip8_context.sound_timer > 0) {
-            SDL_ResumeAudioStreamDevice(as->stream);
-            if (SDL_GetAudioStreamQueued(as->stream) < (int)as->wav_data_len) {
-                SDL_PutAudioStreamData(as->stream, as->wav_data,
-                                       as->wav_data_len);
-            }
-            --as->chip8_context.sound_timer;
-        } else {
-            SDL_PauseAudioStreamDevice(as->stream);
-        }
-        as->last_timer_update += STEP_TIMERS_UPDATE_IN_MILLISECONDS;
+        --as->chip8_context.sound_timer;
+    } else {
+        SDL_PauseAudioStreamDevice(as->stream);
     }
 
-    while ((ms_number - as->last_step) >= STEP_RATE_IN_MILLISECONDS) {
-        /* do emulator step */
+    if (as->need_redraw && !as->chip8_context.vblank_sync) {
+        draw_screen(as);
+        as->need_redraw = false;
+    }
+    as->chip8_context.vblank_sync = false;
+    for (size_t instructions_count = 1;
+         instructions_count <= INSTRUCTIONS_PER_FRAME; instructions_count++) {
         uint16_t cur_instruction = fetch_instruction(as);
         decode_instruction(cur_instruction, &message, as);
-        if (as->need_redraw) {
-            draw_screen(as);
-            as->need_redraw = false;
+        if (as->enable_logs) {
+            printf("%04x: %s\n", cur_instruction, message);
         }
-
-        as->last_step += STEP_RATE_IN_MILLISECONDS;
+        if (as->need_redraw && !as->chip8_context.vblank_sync) {
+            draw_screen(as);
+            as->need_redraw               = false;
+            as->chip8_context.vblank_sync = true;
+        } else if (as->need_redraw && as->chip8_context.vblank_sync) {
+            break;
+        }
     }
-
     free(message);
+
+    end_ticks  = SDL_GetTicksNS();
+    elapsed_ns = (end_ticks - start_ticks);
+    SDL_DelayNS(floor(NANOSECONDS_PER_FRAME - elapsed_ns));
 
     return SDL_APP_CONTINUE;
 }
