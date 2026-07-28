@@ -355,6 +355,7 @@ uint16_t stack_pop_instruction(AppState *appstate)
     if (appstate->chip8_context.SP > 0) {
         return appstate->chip8_context.stack[appstate->chip8_context.SP--];
     }
+    return 0;
 }
 
 static void instruction_00E0(AppState *appstate, char **message)
@@ -527,9 +528,10 @@ static void instruction_8xy5(AppState *appstate, char **message,
 static void instruction_8xy6(AppState *appstate, char **message,
                              uint8_t second_nibble, uint8_t third_nibble)
 {
+    uint8_t least_significant_bit;
+
     appstate->chip8_context.V[second_nibble] =
         appstate->chip8_context.V[third_nibble];
-    uint8_t least_significant_bit;
     if ((appstate->chip8_context.V[second_nibble] & 0x1) == 0x1) {
         least_significant_bit = 1;
     } else {
@@ -562,9 +564,10 @@ static void instruction_8xy7(AppState *appstate, char **message,
 static void instruction_8xyE(AppState *appstate, char **message,
                              uint8_t second_nibble, uint8_t third_nibble)
 {
+    uint8_t most_significant_bit;
+
     appstate->chip8_context.V[second_nibble] =
         appstate->chip8_context.V[third_nibble];
-    uint8_t most_significant_bit;
     if ((appstate->chip8_context.V[second_nibble] & 0x80) == 0x80) {
         most_significant_bit = 1;
     } else {
@@ -623,26 +626,27 @@ static void instruction_dxyn(AppState *appstate, char **message,
                              uint8_t second_nibble, uint8_t third_nibble,
                              uint8_t fourth_nibble)
 {
-    uint16_t x_coord =
-        appstate->chip8_context.V[second_nibble] % CHIP8_DISPLAY_WIDTH;
-    uint16_t y_coord =
-        appstate->chip8_context.V[third_nibble] % CHIP8_DISPLAY_HEIGHT;
-    uint8_t n                      = fourth_nibble;
+    uint8_t   n, sprite_data, sprite_bit_value, bit_pos, display_row_bit;
+    uint16_t  x_coord, y_coord;
+    uint64_t *display_row;
+
+    x_coord = appstate->chip8_context.V[second_nibble] % CHIP8_DISPLAY_WIDTH;
+    y_coord = appstate->chip8_context.V[third_nibble] % CHIP8_DISPLAY_HEIGHT;
     appstate->chip8_context.V[0xF] = 0;
+    n                              = fourth_nibble;
 
     for (size_t y = 0; y < n; y++) {
         if (y_coord + y >= CHIP8_DISPLAY_HEIGHT)
             break;
-        uint8_t sprite_data =
+        sprite_data =
             appstate->chip8_context.RAM[appstate->chip8_context.I + y];
-        uint64_t *display_row =
-            &appstate->chip8_context.display_cells[y_coord + y];
+        display_row = &appstate->chip8_context.display_cells[y_coord + y];
         for (short x = 0; x < 8; x++) {
             if (x_coord + x >= CHIP8_DISPLAY_WIDTH)
                 break;
-            uint8_t sprite_bit_value = (sprite_data >> (7 - x)) & 0x1;
-            uint8_t bit_pos          = CHIP8_DISPLAY_WIDTH - 1 - (x_coord + x);
-            uint8_t display_row_bit  = (uint8_t)(*display_row >> bit_pos) & 0x1;
+            sprite_bit_value = (sprite_data >> (7 - x)) & 0x1;
+            bit_pos          = CHIP8_DISPLAY_WIDTH - 1 - (x_coord + x);
+            display_row_bit  = (uint8_t)(*display_row >> bit_pos) & 0x1;
             if (sprite_bit_value == 1 && display_row_bit == 1)
                 appstate->chip8_context.V[0xF] = 1;
             *display_row ^= ((uint64_t)sprite_bit_value << bit_pos);
@@ -969,10 +973,11 @@ static void set_rect_xy_(SDL_FRect *r, short x, short y)
 void draw_screen(AppState *appstate)
 {
     SDL_FRect r;
+    unsigned  i;
+    unsigned  j;
+    int       display_cell;
+
     r.w = r.h = PIXEL_SIZE;
-    unsigned i;
-    unsigned j;
-    int      display_cell;
 
     SDL_SetRenderDrawColor(appstate->renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
     SDL_RenderClear(appstate->renderer);
@@ -1002,10 +1007,11 @@ SDL_AppResult SDL_AppIterate(void *appstate)
 {
     Uint64    start_ticks, end_ticks;
     float     elapsed_ns;
+    char     *message;
     AppState *as;
 
-    as            = (AppState *)appstate;
-    char *message = malloc(256);
+    as      = (AppState *)appstate;
+    message = malloc(256);
 
     SDL_PumpEvents();
     start_ticks = SDL_GetTicksNS();
