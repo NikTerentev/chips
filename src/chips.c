@@ -18,7 +18,6 @@
 #define ROM_GAME_ADDRESS_START    0x200
 #define RAM_SIZE                  4096
 #define ROM_MAX_SIZE              3584
-// TODO: Add command line argument for changing IPF/FPS
 #define INSTRUCTIONS_PER_FRAME    11
 #define FRAMES_PER_SECOND         60
 #define CHIP8_DISPLAY_WIDTH       64
@@ -101,6 +100,7 @@ typedef struct {
 
 typedef struct {
     const bool      *keyboard_state;
+    bool             stop_execution;
     char            *rom_file_path;
     CHIP8Context     chip8_context;
     Uint32           wav_data_len;
@@ -294,6 +294,7 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[])
     as->keyboard_state   = SDL_GetKeyboardState(NULL);
     as->chip8_context.PC = ROM_GAME_ADDRESS_START;
     as->need_redraw      = false;
+    as->stop_execution   = false;
     *appstate            = as;
 
     memcpy(as->chip8_context.keyboard_keys, keys, sizeof(keys));
@@ -841,6 +842,10 @@ void decode_instruction(AppState *appstate, char **message,
         case 0xE:
             instruction_00EE(appstate, message);
             break;
+        default:
+            snprintf(*message, 256, "Not an original Chip-8 instruction");
+            appstate->stop_execution = true;
+            break;
         }
         break;
     case 0x1:
@@ -897,6 +902,10 @@ void decode_instruction(AppState *appstate, char **message,
         case 0xE:
             instruction_8xyE(appstate, message, second_nibble, third_nibble);
             break;
+        default:
+            snprintf(*message, 256, "Not an original Chip-8 instruction");
+            appstate->stop_execution = true;
+            break;
         }
         break;
     case 0x9:
@@ -924,6 +933,10 @@ void decode_instruction(AppState *appstate, char **message,
             break;
         case 0xA1:
             instruction_ExA1(appstate, message, second_nibble);
+            break;
+        default:
+            snprintf(*message, 256, "Not an original Chip-8 instruction");
+            appstate->stop_execution = true;
             break;
         }
         break;
@@ -956,10 +969,15 @@ void decode_instruction(AppState *appstate, char **message,
         case 0x65:
             instruction_Fx65(appstate, message, second_nibble);
             break;
+        default:
+            snprintf(*message, 256, "Not an original Chip-8 instruction");
+            appstate->stop_execution = true;
+            break;
         }
         break;
     default:
-        snprintf(*message, 256, "Not an Chip-8 instruction");
+        snprintf(*message, 256, "Not an original Chip-8 instruction");
+        appstate->stop_execution = true;
         break;
     }
 }
@@ -1046,6 +1064,9 @@ SDL_AppResult SDL_AppIterate(void *appstate)
             as->chip8_context.vblank_sync = true;
         } else if (as->need_redraw && as->chip8_context.vblank_sync) {
             break;
+        }
+        if (as->stop_execution) {
+            return SDL_APP_FAILURE;
         }
     }
     free(message);
