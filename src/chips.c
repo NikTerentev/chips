@@ -266,8 +266,9 @@ bool parse_command_line_args(int argc, char *argv[], AppState *appstate)
  */
 bool read_rom_file(AppState *appstate)
 {
-    int   rom_file_size;
-    FILE *fp;
+    int    rom_file_size;
+    size_t read;
+    FILE  *fp;
 
     if ((fp = fopen(appstate->rom_file_path, "rb")) == NULL) {
         fprintf(stderr, "ERROR: Could not read file %s: %s\n",
@@ -287,7 +288,12 @@ bool read_rom_file(AppState *appstate)
         return false;
     }
 
-    fread(&appstate->chip8_context.RAM[0x200], 1, rom_file_size, fp);
+    read = fread(&appstate->chip8_context.RAM[0x200], 1, rom_file_size, fp);
+    if (read != (size_t)rom_file_size) {
+        fprintf(stderr, "ERROR: Partial ROM read\n");
+        fclose(fp);
+        return false;
+    }
     fclose(fp);
     return true;
 }
