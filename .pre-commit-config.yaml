@@ -55,3 +55,12 @@ repos:
     rev: v10.0.0
     hooks:
       - id: cspell
+
+  - repo: local
+    hooks:
+      - id: build
+        name: Build chips
+        entry: make -B
+        language: system
+        pass_filenames: false
+        types: [ file ]

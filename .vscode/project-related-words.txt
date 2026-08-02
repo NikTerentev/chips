@@ -1,5 +1,6 @@
 asynth
 ASYNTH
+awalsh
 checkmake
 Corax
 cppdbg
@@ -8,7 +9,9 @@ Cxkk
 CXNN
 dxyn
 dxyn
+libsdl
 Octojam
+pkgs
 prek
 sassets
 stdint
