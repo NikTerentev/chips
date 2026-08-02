@@ -334,7 +334,7 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[])
 
     memcpy(as->chip8_context.keyboard_keys, keys, sizeof(keys));
     SDL_zeroa(as->chip8_context.display_cells);
-    srand(time(NULL));
+    srand((unsigned int)time(NULL));
 
     if (!as || !sdl_app_init() || !sdl_load_wav(as, &spec) ||
         !sdl_create_audio_stream(as, &spec) ||
