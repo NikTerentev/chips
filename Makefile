@@ -1,6 +1,6 @@
 CC = clang
-CFLAGS = -Wall -Wextra -g -std=c99 -Wdeclaration-after-statement
-LDFLAGS = $(shell pkg-config --libs sdl3)
+CFLAGS = -Wall -Wextra -g -std=gnu99 -Wdeclaration-after-statement
+LDFLAGS = $(shell pkg-config --libs sdl3) -lm
 CFLAGS += $(shell pkg-config --cflags sdl3)
 TARGET = chips
 SRC = src/chips.c
