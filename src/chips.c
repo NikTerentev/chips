@@ -181,6 +181,7 @@ bool sdl_load_wav(AppState *as, SDL_AudioSpec *spec)
                  SDL_GetBasePath());
     if (!SDL_LoadWAV(wav_path, spec, &as->wav_data, &as->wav_data_len)) {
         SDL_Log("Couldn't load .wav file: %s", SDL_GetError());
+        SDL_free(wav_path);
         return false;
     }
     SDL_free(wav_path);
