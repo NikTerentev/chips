@@ -14,7 +14,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <unistd.h>
 
+#define NANOSECONDS_IN_SECOND     1000000000.0f
 #define ROM_GAME_ADDRESS_START    0x200
 #define RAM_SIZE                  4096
 #define ROM_MAX_SIZE              3584
@@ -25,10 +27,8 @@
 #define PIXEL_SIZE                20
 #define FONT_SIZE                 16
 #define FONT_BYTES                5
-#define NANOSECONDS_IN_SECOND     1000000000.0f
 
 #define CHIP8_DISPLAY_MATRIX_SIZE (CHIP8_DISPLAY_WIDTH * CHIP8_DISPLAY_HEIGHT)
-#define NANOSECONDS_PER_FRAME     (NANOSECONDS_IN_SECOND / FRAMES_PER_SECOND)
 #define SDL_WINDOW_HEIGHT         (PIXEL_SIZE * CHIP8_DISPLAY_HEIGHT)
 #define SDL_WINDOW_WIDTH          (PIXEL_SIZE * CHIP8_DISPLAY_WIDTH)
 
@@ -99,6 +99,7 @@ typedef struct {
 } CHIP8Context;
 
 typedef struct {
+    float            nanoseconds_per_frame;
     const bool      *keyboard_state;
     bool             stop_execution;
     char            *rom_file_path;
@@ -110,6 +111,8 @@ typedef struct {
     Uint8           *wav_data;
     SDL_Window      *window;
     SDL_AudioStream *stream;
+    int              fps;
+    int              ipf;
 } AppState;
 
 const Uint8 keys[] = {
@@ -217,17 +220,40 @@ bool sdl_create_window_and_renderer(AppState *as)
  */
 bool parse_command_line_args(int argc, char *argv[], AppState *appstate)
 {
-    if (argc == 1) {
-        fputs("ERROR: Provide path to rom file\n", stderr);
-        return false;
-    }
+    int opt, fps, ipf;
 
-    // TODO: Improve parsing, use `getopt()`.
-    for (int i = 1; i < argc; ++i) {
-        if (strcmp(argv[i], "-d") == 0) {
+    while ((opt = getopt(argc, argv, "dr:f:i:")) != -1) {
+        switch (opt) {
+        case 'd':
             appstate->enable_logs = true;
-        } else {
-            appstate->rom_file_path = argv[i];
+            break;
+        case 'r':
+            appstate->rom_file_path = optarg;
+            break;
+        case 'f':
+            fps = atoi(optarg);
+            if (fps >= 1) {
+                appstate->fps = fps;
+            } else {
+                puts("FPS cannot be less than 1");
+                return false;
+            }
+            break;
+        case 'i':
+            ipf = atoi(optarg);
+            if (ipf >= 1) {
+                appstate->ipf = ipf;
+            } else {
+                puts("IPF cannot be less than 1");
+                return false;
+            }
+            break;
+        default: /* '?' */
+            fprintf(stderr,
+                    "Usage: %s [-d (enable instruction logs)] [-r "
+                    "rom_file_path] [-f fps] [-i instructions_per_frame]\n",
+                    argv[0]);
+            return false;
         }
     }
 
@@ -293,6 +319,8 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[])
     as                   = (AppState *)SDL_calloc(1, sizeof(AppState));
     as->keyboard_state   = SDL_GetKeyboardState(NULL);
     as->chip8_context.PC = ROM_GAME_ADDRESS_START;
+    as->ipf              = INSTRUCTIONS_PER_FRAME;
+    as->fps              = FRAMES_PER_SECOND;
     as->need_redraw      = false;
     as->stop_execution   = false;
     *appstate            = as;
@@ -307,6 +335,7 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[])
         !parse_command_line_args(argc, argv, as) || !read_rom_file(as))
         return SDL_APP_FAILURE;
 
+    as->nanoseconds_per_frame = NANOSECONDS_IN_SECOND / as->fps;
     load_font(as);
 
     return SDL_APP_CONTINUE;
@@ -1051,8 +1080,8 @@ SDL_AppResult SDL_AppIterate(void *appstate)
         as->need_redraw = false;
     }
     as->chip8_context.vblank_sync = false;
-    for (size_t instructions_count = 1;
-         instructions_count <= INSTRUCTIONS_PER_FRAME; instructions_count++) {
+    for (int instructions_count = 1; instructions_count <= as->ipf;
+         instructions_count++) {
         uint16_t cur_instruction = fetch_instruction(as);
         decode_instruction(as, &message, cur_instruction);
         if (as->enable_logs) {
@@ -1073,7 +1102,7 @@ SDL_AppResult SDL_AppIterate(void *appstate)
 
     end_ticks  = SDL_GetTicksNS();
     elapsed_ns = (end_ticks - start_ticks);
-    SDL_DelayNS(floor(NANOSECONDS_PER_FRAME - elapsed_ns));
+    SDL_DelayNS(floor(as->nanoseconds_per_frame - elapsed_ns));
 
     return SDL_APP_CONTINUE;
 }
