@@ -1062,7 +1062,6 @@ SDL_AppResult SDL_AppIterate(void *appstate)
     as          = (AppState *)appstate;
     message_ptr = message;
 
-    SDL_PumpEvents();
     start_ticks = SDL_GetTicksNS();
 
     if (as->chip8_context.delay_timer > 0)
