@@ -99,7 +99,7 @@ typedef struct {
 } CHIP8Context;
 
 typedef struct {
-    float            nanoseconds_per_frame;
+    Uint64           nanoseconds_per_frame;
     const bool      *keyboard_state;
     bool             stop_execution;
     char            *rom_file_path;
@@ -268,7 +268,7 @@ bool read_rom_file(AppState *appstate)
     int   rom_file_size;
     FILE *fp;
 
-    if ((fp = fopen(appstate->rom_file_path, "r")) == NULL) {
+    if ((fp = fopen(appstate->rom_file_path, "rb")) == NULL) {
         fprintf(stderr, "ERROR: Could not read file %s: %s\n",
                 appstate->rom_file_path, strerror(errno));
         return false;
@@ -646,7 +646,7 @@ static void instruction_Cxkk(AppState *appstate, char **message,
                              uint8_t second_nibble,
                              uint8_t third_and_fourth_nibbles)
 {
-    Uint8 random_number = (rand() % 255) & third_and_fourth_nibbles;
+    Uint8 random_number = (rand() & 0xFF) & third_and_fourth_nibbles;
     appstate->chip8_context.V[second_nibble] = random_number;
     if (appstate->enable_logs)
         snprintf(*message, 256, "Generate random number: %x", random_number);
@@ -1053,12 +1053,13 @@ void draw_screen(AppState *appstate)
 SDL_AppResult SDL_AppIterate(void *appstate)
 {
     Uint64    start_ticks, end_ticks;
-    float     elapsed_ns;
-    char     *message;
+    char      message[256];
+    char     *message_ptr;
+    Uint64    elapsed_ns;
     AppState *as;
 
-    as      = (AppState *)appstate;
-    message = malloc(256);
+    as          = (AppState *)appstate;
+    message_ptr = message;
 
     SDL_PumpEvents();
     start_ticks = SDL_GetTicksNS();
@@ -1083,7 +1084,7 @@ SDL_AppResult SDL_AppIterate(void *appstate)
     for (int instructions_count = 1; instructions_count <= as->ipf;
          instructions_count++) {
         uint16_t cur_instruction = fetch_instruction(as);
-        decode_instruction(as, &message, cur_instruction);
+        decode_instruction(as, &message_ptr, cur_instruction);
         if (as->enable_logs) {
             printf("%04x: %s\n", cur_instruction, message);
         }
@@ -1098,11 +1099,12 @@ SDL_AppResult SDL_AppIterate(void *appstate)
             return SDL_APP_FAILURE;
         }
     }
-    free(message);
 
     end_ticks  = SDL_GetTicksNS();
-    elapsed_ns = (end_ticks - start_ticks);
-    SDL_DelayNS(floor(as->nanoseconds_per_frame - elapsed_ns));
+    elapsed_ns = end_ticks - start_ticks;
+    if (elapsed_ns < as->nanoseconds_per_frame) {
+        SDL_DelayNS(as->nanoseconds_per_frame - elapsed_ns);
+    }
 
     return SDL_APP_CONTINUE;
 }
