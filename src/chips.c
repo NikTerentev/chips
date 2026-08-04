@@ -6,7 +6,7 @@
 #include <SDL3/SDL_main.h>
 
 #include <errno.h>
-#include <math.h>
+#include <limits.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -16,7 +16,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#define NANOSECONDS_IN_SECOND     1000000000.0f
+#define NANOSECONDS_IN_SECOND     1000000000ULL
 #define ROM_GAME_ADDRESS_START    0x200
 #define RAM_SIZE                  4096
 #define ROM_MAX_SIZE              3584
@@ -111,8 +111,8 @@ typedef struct {
     Uint8           *wav_data;
     SDL_Window      *window;
     SDL_AudioStream *stream;
-    int              fps;
-    int              ipf;
+    Uint8            fps;
+    Uint8            ipf;
 } AppState;
 
 const Uint8 keys[] = {
@@ -122,7 +122,7 @@ const Uint8 keys[] = {
     SDL_SCANCODE_4, SDL_SCANCODE_R, SDL_SCANCODE_F, SDL_SCANCODE_V,
 };
 
-uint8_t DEFALT_FONT[FONT_SIZE][FONT_BYTES] = {
+Uint8 DEFALT_FONT[FONT_SIZE][FONT_BYTES] = {
     /* 0 */
     {0xF0, 0x90, 0x90, 0x90, 0xF0},
     /* 1 */
@@ -233,19 +233,19 @@ bool parse_command_line_args(int argc, char *argv[], AppState *appstate)
             break;
         case 'f':
             fps = atoi(optarg);
-            if (fps >= 1) {
+            if (fps >= 1 && fps <= 255) {
                 appstate->fps = fps;
             } else {
-                puts("FPS cannot be less than 1");
+                puts("FPS cannot be less than 1 or more than 255");
                 return false;
             }
             break;
         case 'i':
             ipf = atoi(optarg);
-            if (ipf >= 1) {
+            if (ipf >= 1 && ipf <= 255) {
                 appstate->ipf = ipf;
             } else {
-                puts("IPF cannot be less than 1");
+                puts("IPF cannot be less than 1 or more than 255");
                 return false;
             }
             break;
@@ -266,7 +266,8 @@ bool parse_command_line_args(int argc, char *argv[], AppState *appstate)
  */
 bool read_rom_file(AppState *appstate)
 {
-    int    rom_file_size;
+    Uint32 rom_file_size;
+    long   ftell_result;
     size_t read;
     FILE  *fp;
 
@@ -278,15 +279,19 @@ bool read_rom_file(AppState *appstate)
 
     /* Calculate file length */
     fseek(fp, 0, SEEK_END);
-    rom_file_size = ftell(fp);
-    rewind(fp);
-
-    if (rom_file_size > ROM_MAX_SIZE) {
-        fprintf(stderr, "ERROR: Your rom is too big for CHIP-8 %s: %s\n",
-                appstate->rom_file_path, strerror(1));
+    ftell_result = ftell(fp);
+    if (ftell_result < 0) {
+        fprintf(stderr, "ERROR: Problem reading file\n");
+        fclose(fp);
+        return false;
+    } else if (ftell_result > ROM_MAX_SIZE) {
+        fprintf(stderr, "ERROR: Your rom is too big for CHIP-8: %s\n",
+                appstate->rom_file_path);
         fclose(fp);
         return false;
     }
+    rom_file_size = (Uint32)ftell_result;
+    rewind(fp);
 
     read = fread(&appstate->chip8_context.RAM[0x200], 1, rom_file_size, fp);
     if (read != (size_t)rom_file_size) {
@@ -334,7 +339,7 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[])
 
     memcpy(as->chip8_context.keyboard_keys, keys, sizeof(keys));
     SDL_zeroa(as->chip8_context.display_cells);
-    srand((unsigned int)time(NULL));
+    srand((Uint32)time(NULL));
 
     if (!as || !sdl_app_init() || !sdl_load_wav(as, &spec) ||
         !sdl_create_audio_stream(as, &spec) ||
@@ -364,22 +369,22 @@ SDL_AppResult SDL_AppEvent(SDL_UNUSED void *appstate, SDL_Event *event)
     }
 }
 
-uint16_t fetch_instruction(AppState *appstate)
+Uint16 fetch_instruction(AppState *appstate)
 {
-    uint16_t instruction =
+    Uint16 instruction =
         ((appstate->chip8_context.RAM[appstate->chip8_context.PC] << 8) |
          appstate->chip8_context.RAM[appstate->chip8_context.PC + 1]);
     appstate->chip8_context.PC += 0x2;
     return instruction;
 }
 
-int get_display_cell(AppState *appstate, short row, short col)
+Uint8 get_display_cell(AppState *appstate, Sint16 row, Sint16 col)
 {
-    int shift = CHIP8_DISPLAY_WIDTH - col - 1;
+    Uint32 shift = CHIP8_DISPLAY_WIDTH - col - 1;
     return (appstate->chip8_context.display_cells[row] >> shift & 0x1);
 }
 
-void stack_push_instruction(uint16_t instruction, AppState *appstate)
+void stack_push_instruction(Uint16 instruction, AppState *appstate)
 {
     if (appstate->chip8_context.SP >= 16) {
         exit(1);
@@ -387,7 +392,7 @@ void stack_push_instruction(uint16_t instruction, AppState *appstate)
     appstate->chip8_context.stack[++appstate->chip8_context.SP] = instruction;
 }
 
-uint16_t stack_pop_instruction(AppState *appstate)
+Uint16 stack_pop_instruction(AppState *appstate)
 {
     if (appstate->chip8_context.SP > 0) {
         return appstate->chip8_context.stack[appstate->chip8_context.SP--];
@@ -412,7 +417,7 @@ static void instruction_00EE(AppState *appstate, char **message)
 }
 
 static void instruction_1nnn(AppState *appstate, char **message,
-                             uint16_t second_third_and_fourth_nibbles)
+                             Uint16 second_third_and_fourth_nibbles)
 {
     appstate->chip8_context.PC = second_third_and_fourth_nibbles;
     if (appstate->enable_logs)
@@ -421,7 +426,7 @@ static void instruction_1nnn(AppState *appstate, char **message,
 }
 
 static void instruction_2nnn(AppState *appstate, char **message,
-                             uint16_t second_third_and_fourth_nibbles)
+                             Uint16 second_third_and_fourth_nibbles)
 {
     stack_push_instruction(appstate->chip8_context.PC, appstate);
     appstate->chip8_context.PC = second_third_and_fourth_nibbles;
@@ -431,8 +436,8 @@ static void instruction_2nnn(AppState *appstate, char **message,
 }
 
 static void instruction_3xkk(AppState *appstate, char **message,
-                             uint8_t second_nibble,
-                             uint8_t third_and_fourth_nibbles)
+                             Uint8 second_nibble,
+                             Uint8 third_and_fourth_nibbles)
 {
     if (appstate->chip8_context.V[second_nibble] == third_and_fourth_nibbles) {
         appstate->chip8_context.PC += 0x2;
@@ -443,8 +448,8 @@ static void instruction_3xkk(AppState *appstate, char **message,
 }
 
 static void instruction_4xkk(AppState *appstate, char **message,
-                             uint8_t second_nibble,
-                             uint8_t third_and_fourth_nibbles)
+                             Uint8 second_nibble,
+                             Uint8 third_and_fourth_nibbles)
 {
     if (appstate->chip8_context.V[second_nibble] != third_and_fourth_nibbles) {
         appstate->chip8_context.PC += 0x2;
@@ -456,7 +461,7 @@ static void instruction_4xkk(AppState *appstate, char **message,
 }
 
 static void instruction_5xy0(AppState *appstate, char **message,
-                             uint8_t second_nibble, uint8_t third_nibble)
+                             Uint8 second_nibble, Uint8 third_nibble)
 {
     if (appstate->chip8_context.V[second_nibble] ==
         appstate->chip8_context.V[third_nibble]) {
@@ -468,8 +473,8 @@ static void instruction_5xy0(AppState *appstate, char **message,
 }
 
 static void instruction_6xkk(AppState *appstate, char **message,
-                             uint8_t second_nibble,
-                             uint8_t third_and_fourth_nibbles)
+                             Uint8 second_nibble,
+                             Uint8 third_and_fourth_nibbles)
 {
     appstate->chip8_context.V[second_nibble] = third_and_fourth_nibbles;
     if (appstate->enable_logs)
@@ -478,8 +483,8 @@ static void instruction_6xkk(AppState *appstate, char **message,
 }
 
 static void instruction_7xkk(AppState *appstate, char **message,
-                             uint8_t second_nibble,
-                             uint8_t third_and_fourth_nibbles)
+                             Uint8 second_nibble,
+                             Uint8 third_and_fourth_nibbles)
 {
     appstate->chip8_context.V[second_nibble] += third_and_fourth_nibbles;
     if (appstate->enable_logs)
@@ -488,7 +493,7 @@ static void instruction_7xkk(AppState *appstate, char **message,
 }
 
 static void instruction_8xy0(AppState *appstate, char **message,
-                             uint8_t second_nibble, uint8_t third_nibble)
+                             Uint8 second_nibble, Uint8 third_nibble)
 {
     appstate->chip8_context.V[second_nibble] =
         appstate->chip8_context.V[third_nibble];
@@ -498,7 +503,7 @@ static void instruction_8xy0(AppState *appstate, char **message,
 }
 
 static void instruction_8xy1(AppState *appstate, char **message,
-                             uint8_t second_nibble, uint8_t third_nibble)
+                             Uint8 second_nibble, Uint8 third_nibble)
 {
     appstate->chip8_context.V[second_nibble] |=
         appstate->chip8_context.V[third_nibble];
@@ -509,7 +514,7 @@ static void instruction_8xy1(AppState *appstate, char **message,
 }
 
 static void instruction_8xy2(AppState *appstate, char **message,
-                             uint8_t second_nibble, uint8_t third_nibble)
+                             Uint8 second_nibble, Uint8 third_nibble)
 {
     appstate->chip8_context.V[second_nibble] &=
         appstate->chip8_context.V[third_nibble];
@@ -520,7 +525,7 @@ static void instruction_8xy2(AppState *appstate, char **message,
 }
 
 static void instruction_8xy3(AppState *appstate, char **message,
-                             uint8_t second_nibble, uint8_t third_nibble)
+                             Uint8 second_nibble, Uint8 third_nibble)
 {
     appstate->chip8_context.V[second_nibble] ^=
         appstate->chip8_context.V[third_nibble];
@@ -531,11 +536,11 @@ static void instruction_8xy3(AppState *appstate, char **message,
 }
 
 static void instruction_8xy4(AppState *appstate, char **message,
-                             uint8_t second_nibble, uint8_t third_nibble)
+                             Uint8 second_nibble, Uint8 third_nibble)
 {
-    uint16_t add_result = appstate->chip8_context.V[second_nibble] +
-                          appstate->chip8_context.V[third_nibble];
-    appstate->chip8_context.V[second_nibble] = (uint8_t)add_result;
+    Uint16 add_result = appstate->chip8_context.V[second_nibble] +
+                        appstate->chip8_context.V[third_nibble];
+    appstate->chip8_context.V[second_nibble] = (Uint8)add_result;
     if (add_result > 255)
         appstate->chip8_context.V[15] = 1;
     else
@@ -547,7 +552,7 @@ static void instruction_8xy4(AppState *appstate, char **message,
 }
 
 static void instruction_8xy5(AppState *appstate, char **message,
-                             uint8_t second_nibble, uint8_t third_nibble)
+                             Uint8 second_nibble, Uint8 third_nibble)
 {
     bool is_lower = appstate->chip8_context.V[second_nibble] >=
                     appstate->chip8_context.V[third_nibble];
@@ -563,9 +568,9 @@ static void instruction_8xy5(AppState *appstate, char **message,
 }
 
 static void instruction_8xy6(AppState *appstate, char **message,
-                             uint8_t second_nibble, uint8_t third_nibble)
+                             Uint8 second_nibble, Uint8 third_nibble)
 {
-    uint8_t least_significant_bit;
+    Uint8 least_significant_bit;
 
     appstate->chip8_context.V[second_nibble] =
         appstate->chip8_context.V[third_nibble];
@@ -581,7 +586,7 @@ static void instruction_8xy6(AppState *appstate, char **message,
 }
 
 static void instruction_8xy7(AppState *appstate, char **message,
-                             uint8_t second_nibble, uint8_t third_nibble)
+                             Uint8 second_nibble, Uint8 third_nibble)
 {
     bool is_lower = appstate->chip8_context.V[third_nibble] >=
                     appstate->chip8_context.V[second_nibble];
@@ -599,9 +604,9 @@ static void instruction_8xy7(AppState *appstate, char **message,
 }
 
 static void instruction_8xyE(AppState *appstate, char **message,
-                             uint8_t second_nibble, uint8_t third_nibble)
+                             Uint8 second_nibble, Uint8 third_nibble)
 {
-    uint8_t most_significant_bit;
+    Uint8 most_significant_bit;
 
     appstate->chip8_context.V[second_nibble] =
         appstate->chip8_context.V[third_nibble];
@@ -617,7 +622,7 @@ static void instruction_8xyE(AppState *appstate, char **message,
 }
 
 static void instruction_9xy0(AppState *appstate, char **message,
-                             uint8_t second_nibble, uint8_t third_nibble)
+                             Uint8 second_nibble, Uint8 third_nibble)
 {
     if (appstate->chip8_context.V[second_nibble] !=
         appstate->chip8_context.V[third_nibble]) {
@@ -630,7 +635,7 @@ static void instruction_9xy0(AppState *appstate, char **message,
 }
 
 static void instruction_Annn(AppState *appstate, char **message,
-                             uint16_t second_third_and_fourth_nibbles)
+                             Uint16 second_third_and_fourth_nibbles)
 {
     appstate->chip8_context.I = second_third_and_fourth_nibbles;
     if (appstate->enable_logs)
@@ -639,8 +644,8 @@ static void instruction_Annn(AppState *appstate, char **message,
 }
 
 static void instruction_Bnnn(AppState *appstate, char **message,
-                             uint8_t  second_nibble,
-                             uint16_t second_third_and_fourth_nibbles)
+                             Uint8  second_nibble,
+                             Uint16 second_third_and_fourth_nibbles)
 {
     appstate->chip8_context.PC =
         second_third_and_fourth_nibbles + appstate->chip8_context.V[0];
@@ -650,8 +655,8 @@ static void instruction_Bnnn(AppState *appstate, char **message,
 }
 
 static void instruction_Cxkk(AppState *appstate, char **message,
-                             uint8_t second_nibble,
-                             uint8_t third_and_fourth_nibbles)
+                             Uint8 second_nibble,
+                             Uint8 third_and_fourth_nibbles)
 {
     Uint8 random_number = (rand() & 0xFF) & third_and_fourth_nibbles;
     appstate->chip8_context.V[second_nibble] = random_number;
@@ -660,12 +665,12 @@ static void instruction_Cxkk(AppState *appstate, char **message,
 }
 
 static void instruction_dxyn(AppState *appstate, char **message,
-                             uint8_t second_nibble, uint8_t third_nibble,
-                             uint8_t fourth_nibble)
+                             Uint8 second_nibble, Uint8 third_nibble,
+                             Uint8 fourth_nibble)
 {
-    uint8_t   n, sprite_data, sprite_bit_value, bit_pos, display_row_bit;
-    uint16_t  x_coord, y_coord;
-    uint64_t *display_row;
+    Uint8   n, sprite_data, sprite_bit_value, bit_pos, display_row_bit;
+    Uint16  x_coord, y_coord;
+    Uint64 *display_row;
 
     x_coord = appstate->chip8_context.V[second_nibble] % CHIP8_DISPLAY_WIDTH;
     y_coord = appstate->chip8_context.V[third_nibble] % CHIP8_DISPLAY_HEIGHT;
@@ -683,10 +688,10 @@ static void instruction_dxyn(AppState *appstate, char **message,
                 break;
             sprite_bit_value = (sprite_data >> (7 - x)) & 0x1;
             bit_pos          = CHIP8_DISPLAY_WIDTH - 1 - (x_coord + x);
-            display_row_bit  = (uint8_t)(*display_row >> bit_pos) & 0x1;
+            display_row_bit  = (Uint8)(*display_row >> bit_pos) & 0x1;
             if (sprite_bit_value == 1 && display_row_bit == 1)
                 appstate->chip8_context.V[0xF] = 1;
-            *display_row ^= ((uint64_t)sprite_bit_value << bit_pos);
+            *display_row ^= ((Uint64)sprite_bit_value << bit_pos);
         }
     }
     appstate->need_redraw = true;
@@ -699,10 +704,10 @@ static void instruction_dxyn(AppState *appstate, char **message,
 }
 
 static void instruction_Ex9E(AppState *appstate, char **message,
-                             uint8_t second_nibble)
+                             Uint8 second_nibble)
 {
-    uint8_t second_nibble_value = appstate->chip8_context.V[second_nibble];
-    uint8_t key_scancode =
+    Uint8 second_nibble_value = appstate->chip8_context.V[second_nibble];
+    Uint8 key_scancode =
         appstate->chip8_context.keyboard_keys[second_nibble_value];
     if (appstate->keyboard_state[key_scancode]) {
         appstate->chip8_context.PC += 2;
@@ -714,10 +719,10 @@ static void instruction_Ex9E(AppState *appstate, char **message,
 }
 
 static void instruction_ExA1(AppState *appstate, char **message,
-                             uint8_t second_nibble)
+                             Uint8 second_nibble)
 {
-    uint8_t second_nibble_value = appstate->chip8_context.V[second_nibble];
-    uint8_t key_scancode =
+    Uint8 second_nibble_value = appstate->chip8_context.V[second_nibble];
+    Uint8 key_scancode =
         appstate->chip8_context.keyboard_keys[second_nibble_value];
     if (!appstate->keyboard_state[key_scancode]) {
         appstate->chip8_context.PC += 2;
@@ -729,7 +734,7 @@ static void instruction_ExA1(AppState *appstate, char **message,
 }
 
 static void instruction_Fx07(AppState *appstate, char **message,
-                             uint8_t second_nibble)
+                             Uint8 second_nibble)
 {
     appstate->chip8_context.V[second_nibble] =
         appstate->chip8_context.delay_timer;
@@ -738,16 +743,16 @@ static void instruction_Fx07(AppState *appstate, char **message,
 }
 
 static void instruction_Fx0A(AppState *appstate, char **message,
-                             uint8_t second_nibble)
+                             Uint8 second_nibble)
 {
     bool is_key_pressed = false;
     for (size_t key_index = 0; key_index < 16; key_index++) {
-        uint8_t cur_scancode = appstate->chip8_context.keyboard_keys[key_index];
+        Uint8 cur_scancode = appstate->chip8_context.keyboard_keys[key_index];
         if (appstate->keyboard_state[cur_scancode]) {
             snprintf(*message, 256, "Key %zx is pressed, number putted in V%x.",
                      key_index, second_nibble);
             SDL_ResetKeyboard();
-            appstate->chip8_context.V[second_nibble] = (uint8_t)key_index;
+            appstate->chip8_context.V[second_nibble] = (Uint8)key_index;
             is_key_pressed                           = true;
             break;
         }
@@ -762,7 +767,7 @@ static void instruction_Fx0A(AppState *appstate, char **message,
 }
 
 static void instruction_Fx15(AppState *appstate, char **message,
-                             uint8_t second_nibble)
+                             Uint8 second_nibble)
 {
     appstate->chip8_context.delay_timer =
         appstate->chip8_context.V[second_nibble];
@@ -771,7 +776,7 @@ static void instruction_Fx15(AppState *appstate, char **message,
 }
 
 static void instruction_Fx18(AppState *appstate, char **message,
-                             uint8_t second_nibble)
+                             Uint8 second_nibble)
 {
     appstate->chip8_context.sound_timer =
         appstate->chip8_context.V[second_nibble];
@@ -780,7 +785,7 @@ static void instruction_Fx18(AppState *appstate, char **message,
 }
 
 static void instruction_Fx1E(AppState *appstate, char **message,
-                             uint8_t second_nibble)
+                             Uint8 second_nibble)
 {
     appstate->chip8_context.I += appstate->chip8_context.V[second_nibble];
     if (appstate->enable_logs)
@@ -788,7 +793,7 @@ static void instruction_Fx1E(AppState *appstate, char **message,
 }
 
 static void instruction_Fx29(AppState *appstate, char **message,
-                             uint8_t second_nibble)
+                             Uint8 second_nibble)
 {
     appstate->chip8_context.I = 5 * appstate->chip8_context.V[second_nibble];
     if (appstate->enable_logs)
@@ -796,12 +801,12 @@ static void instruction_Fx29(AppState *appstate, char **message,
 }
 
 static void instruction_Fx33(AppState *appstate, char **message,
-                             uint8_t second_nibble)
+                             Uint8 second_nibble)
 {
     /* We need to split VX number to three decimal digits */
-    uint8_t v_number = appstate->chip8_context.V[second_nibble];
-    uint8_t number;
-    uint8_t decimal_base = 10;
+    Uint8 v_number = appstate->chip8_context.V[second_nibble];
+    Uint8 number;
+    Uint8 decimal_base = 10;
     for (int offset = 2; offset >= 0; offset--) {
         number = v_number % decimal_base;
         v_number /= decimal_base;
@@ -816,7 +821,7 @@ static void instruction_Fx33(AppState *appstate, char **message,
 }
 
 static void instruction_Fx55(AppState *appstate, char **message,
-                             uint8_t second_nibble)
+                             Uint8 second_nibble)
 {
     if (second_nibble == 0) {
         appstate->chip8_context.RAM[appstate->chip8_context.I++] =
@@ -837,7 +842,7 @@ static void instruction_Fx55(AppState *appstate, char **message,
 }
 
 static void instruction_Fx65(AppState *appstate, char **message,
-                             uint8_t second_nibble)
+                             Uint8 second_nibble)
 {
     if (second_nibble == 0) {
         appstate->chip8_context.V[0] =
@@ -856,17 +861,16 @@ static void instruction_Fx65(AppState *appstate, char **message,
                  second_nibble);
 }
 
-void decode_instruction(AppState *appstate, char **message,
-                        uint16_t instruction)
+void decode_instruction(AppState *appstate, char **message, Uint16 instruction)
 {
     /* Get first nibble (to decode) from instruction using `bit mask` and `and`
      */
-    uint8_t first_nibble             = GET_FIRST_NIBBLE(instruction);
-    uint8_t second_nibble            = GET_SECOND_NIBBLE(instruction);
-    uint8_t third_nibble             = GET_THIRD_NIBBLE(instruction);
-    uint8_t fourth_nibble            = GET_FOURTH_NIBBLE(instruction);
-    uint8_t third_and_fourth_nibbles = GET_THIRD_AND_FORTH_NIBBLES(instruction);
-    uint16_t second_third_and_fourth_nibbles =
+    Uint8  first_nibble             = GET_FIRST_NIBBLE(instruction);
+    Uint8  second_nibble            = GET_SECOND_NIBBLE(instruction);
+    Uint8  third_nibble             = GET_THIRD_NIBBLE(instruction);
+    Uint8  fourth_nibble            = GET_FOURTH_NIBBLE(instruction);
+    Uint8  third_and_fourth_nibbles = GET_THIRD_AND_FORTH_NIBBLES(instruction);
+    Uint16 second_third_and_fourth_nibbles =
         GET_SECOND_THIRD_AND_FOURTH_NIBBLES(instruction);
 
     switch (first_nibble) {
@@ -1018,7 +1022,7 @@ void decode_instruction(AppState *appstate, char **message,
     }
 }
 
-static void set_rect_xy_(SDL_FRect *r, short x, short y)
+static void set_rect_xy_(SDL_FRect *r, Uint16 x, Uint16 y)
 {
     r->x = (float)(x * PIXEL_SIZE);
     r->y = (float)(y * PIXEL_SIZE);
@@ -1026,10 +1030,10 @@ static void set_rect_xy_(SDL_FRect *r, short x, short y)
 
 void draw_screen(AppState *appstate)
 {
+    Uint8     display_cell;
     SDL_FRect r;
-    unsigned  i;
-    unsigned  j;
-    int       display_cell;
+    Uint16    i;
+    Uint16    j;
 
     r.w = r.h = PIXEL_SIZE;
 
@@ -1087,9 +1091,9 @@ SDL_AppResult SDL_AppIterate(void *appstate)
         as->need_redraw = false;
     }
     as->chip8_context.vblank_sync = false;
-    for (int instructions_count = 1; instructions_count <= as->ipf;
+    for (size_t instructions_count = 1; instructions_count <= as->ipf;
          instructions_count++) {
-        uint16_t cur_instruction = fetch_instruction(as);
+        Uint16 cur_instruction = fetch_instruction(as);
         decode_instruction(as, &message_ptr, cur_instruction);
         if (as->enable_logs) {
             printf("%04x: %s\n", cur_instruction, message);
