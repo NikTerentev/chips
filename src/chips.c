@@ -221,7 +221,8 @@ bool sdl_create_window_and_renderer(AppState *as)
  */
 bool parse_command_line_args(int argc, char *argv[], AppState *appstate)
 {
-    int opt, fps, ipf;
+    Uint8 fps, ipf;
+    int   opt;
 
     while ((opt = getopt(argc, argv, "dr:f:i:")) != -1) {
         switch (opt) {
@@ -232,7 +233,7 @@ bool parse_command_line_args(int argc, char *argv[], AppState *appstate)
             appstate->rom_file_path = optarg;
             break;
         case 'f':
-            fps = atoi(optarg);
+            fps = (Uint8)atoi(optarg);
             if (fps >= 1 && fps <= 255) {
                 appstate->fps = fps;
             } else {
@@ -241,7 +242,7 @@ bool parse_command_line_args(int argc, char *argv[], AppState *appstate)
             }
             break;
         case 'i':
-            ipf = atoi(optarg);
+            ipf = (Uint8)atoi(optarg);
             if (ipf >= 1 && ipf <= 255) {
                 appstate->ipf = ipf;
             } else {
@@ -372,13 +373,14 @@ SDL_AppResult SDL_AppEvent(SDL_UNUSED void *appstate, SDL_Event *event)
 Uint16 fetch_instruction(AppState *appstate)
 {
     Uint16 instruction =
-        ((appstate->chip8_context.RAM[appstate->chip8_context.PC] << 8) |
-         appstate->chip8_context.RAM[appstate->chip8_context.PC + 1]);
+        (Uint16)((appstate->chip8_context.RAM[appstate->chip8_context.PC]
+                  << 8) |
+                 appstate->chip8_context.RAM[appstate->chip8_context.PC + 1]);
     appstate->chip8_context.PC += 0x2;
     return instruction;
 }
 
-Uint8 get_display_cell(AppState *appstate, Sint16 row, Sint16 col)
+Uint8 get_display_cell(AppState *appstate, Uint16 row, Uint16 col)
 {
     Uint32 shift = CHIP8_DISPLAY_WIDTH - col - 1;
     return (appstate->chip8_context.display_cells[row] >> shift & 0x1);
@@ -687,7 +689,7 @@ static void instruction_dxyn(AppState *appstate, char **message,
             if (x_coord + x >= CHIP8_DISPLAY_WIDTH)
                 break;
             sprite_bit_value = (sprite_data >> (7 - x)) & 0x1;
-            bit_pos          = CHIP8_DISPLAY_WIDTH - 1 - (x_coord + x);
+            bit_pos          = (Uint8)(CHIP8_DISPLAY_WIDTH - 1 - (x_coord + x));
             display_row_bit  = (Uint8)(*display_row >> bit_pos) & 0x1;
             if (sprite_bit_value == 1 && display_row_bit == 1)
                 appstate->chip8_context.V[0xF] = 1;
@@ -1031,9 +1033,8 @@ static void set_rect_xy_(SDL_FRect *r, Uint16 x, Uint16 y)
 void draw_screen(AppState *appstate)
 {
     Uint8     display_cell;
+    Uint16    i, j;
     SDL_FRect r;
-    Uint16    i;
-    Uint16    j;
 
     r.w = r.h = PIXEL_SIZE;
 
@@ -1079,7 +1080,8 @@ SDL_AppResult SDL_AppIterate(void *appstate)
     if (as->chip8_context.sound_timer > 0) {
         SDL_ResumeAudioStreamDevice(as->stream);
         if (SDL_GetAudioStreamQueued(as->stream) < (int)as->wav_data_len) {
-            SDL_PutAudioStreamData(as->stream, as->wav_data, as->wav_data_len);
+            SDL_PutAudioStreamData(as->stream, as->wav_data,
+                                   (int)as->wav_data_len);
         }
         --as->chip8_context.sound_timer;
     } else {

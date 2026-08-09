@@ -17,7 +17,10 @@ sassets
 stdint
 Terentev
 terentevnikita
+Wconversion
 Wdeclaration
 Wextra
+Wpedantic
+Wshadow
 xtrgamr
 zeroa
