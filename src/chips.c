@@ -16,21 +16,26 @@
 #include <time.h>
 #include <unistd.h>
 
-#define NANOSECONDS_IN_SECOND     1000000000ULL
-#define ROM_GAME_ADDRESS_START    0x200
-#define RAM_SIZE                  4096
-#define ROM_MAX_SIZE              3584
-#define INSTRUCTIONS_PER_FRAME    11
-#define FRAMES_PER_SECOND         60
-#define CHIP8_DISPLAY_WIDTH       64
-#define CHIP8_DISPLAY_HEIGHT      32
-#define PIXEL_SIZE                20
-#define FONT_SIZE                 16
-#define FONT_BYTES                5
+#define NANOSECONDS_IN_SECOND      1000000000ULL
+#define SOUND_SAMPLE_RATE          44100
+#define ROM_GAME_ADDRESS_START     0x200
+#define RAM_SIZE                   4096
+#define ROM_MAX_SIZE               3584
+#define SAMPLES_CHUNK_SIZE         1200
+#define ATTACK_RELEASE_SAMPLES_LEN 500
+#define SOUND_NOTE_FREQUENCY       440
+#define FPS_AND_IPF_UPPER_LIMIT    255
+#define INSTRUCTIONS_PER_FRAME     11
+#define FRAMES_PER_SECOND          60
+#define CHIP8_DISPLAY_WIDTH        64
+#define CHIP8_DISPLAY_HEIGHT       32
+#define PIXEL_SIZE                 20
+#define FONT_SIZE                  16
+#define FONT_BYTES                 5
 
-#define CHIP8_DISPLAY_MATRIX_SIZE (CHIP8_DISPLAY_WIDTH * CHIP8_DISPLAY_HEIGHT)
-#define SDL_WINDOW_HEIGHT         (PIXEL_SIZE * CHIP8_DISPLAY_HEIGHT)
-#define SDL_WINDOW_WIDTH          (PIXEL_SIZE * CHIP8_DISPLAY_WIDTH)
+#define CHIP8_DISPLAY_MATRIX_SIZE  (CHIP8_DISPLAY_WIDTH * CHIP8_DISPLAY_HEIGHT)
+#define SDL_WINDOW_HEIGHT          (PIXEL_SIZE * CHIP8_DISPLAY_HEIGHT)
+#define SDL_WINDOW_WIDTH           (PIXEL_SIZE * CHIP8_DISPLAY_WIDTH)
 
 /*
  * Get first nibble from instruction.
@@ -100,15 +105,15 @@ typedef struct {
 
 typedef struct {
     Uint64           nanoseconds_per_frame;
+    int              current_sine_sample;
     const bool      *keyboard_state;
     bool             stop_execution;
     char            *rom_file_path;
     CHIP8Context     chip8_context;
-    Uint32           wav_data_len;
+    bool             audio_playing;
     bool             need_redraw;
     bool             enable_logs;
     SDL_Renderer    *renderer;
-    Uint8           *wav_data;
     SDL_Window      *window;
     SDL_AudioStream *stream;
     Uint8            fps;
@@ -171,30 +176,18 @@ bool sdl_app_init(void)
 }
 
 /*
- * Load default WAV file from assets.
+ * Create SDL audio device stream.
  */
-bool sdl_load_wav(AppState *as, SDL_AudioSpec *spec)
+bool sdl_create_audio_stream(AppState *as)
 {
-    char *wav_path;
+    SDL_AudioSpec spec;
 
-    SDL_asprintf(&wav_path, "%sassets/441634__xtrgamr__asynth.wav",
-                 SDL_GetBasePath());
-    if (!SDL_LoadWAV(wav_path, spec, &as->wav_data, &as->wav_data_len)) {
-        SDL_Log("Couldn't load .wav file: %s", SDL_GetError());
-        SDL_free(wav_path);
-        return false;
-    }
-    SDL_free(wav_path);
-    return true;
-}
+    spec.freq     = SOUND_SAMPLE_RATE;
+    spec.format   = SDL_AUDIO_F32;
+    spec.channels = 1;
 
-/*
- * Create SDL open audio device stream.
- */
-bool sdl_create_audio_stream(AppState *as, SDL_AudioSpec *spec)
-{
-    as->stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK,
-                                           spec, NULL, NULL);
+    as->stream    = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK,
+                                              &spec, NULL, NULL);
     if (!as->stream) {
         SDL_Log("Couldn't create audio stream: %s", SDL_GetError());
         return false;
@@ -234,19 +227,21 @@ bool parse_command_line_args(int argc, char *argv[], AppState *appstate)
             break;
         case 'f':
             fps = (Uint8)atoi(optarg);
-            if (fps >= 1 && fps <= 255) {
+            if (fps >= 1 && fps <= FPS_AND_IPF_UPPER_LIMIT) {
                 appstate->fps = fps;
             } else {
-                puts("FPS cannot be less than 1 or more than 255");
+                printf("FPS cannot be less than 1 or more than %d\n",
+                       FPS_AND_IPF_UPPER_LIMIT);
                 return false;
             }
             break;
         case 'i':
             ipf = (Uint8)atoi(optarg);
-            if (ipf >= 1 && ipf <= 255) {
+            if (ipf >= 1 && ipf <= FPS_AND_IPF_UPPER_LIMIT) {
                 appstate->ipf = ipf;
             } else {
-                puts("IPF cannot be less than 1 or more than 255");
+                printf("IPF cannot be less than 1 or more than %d\n",
+                       FPS_AND_IPF_UPPER_LIMIT);
                 return false;
             }
             break;
@@ -326,26 +321,28 @@ void load_font(AppState *appstate)
  */
 SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[])
 {
-    SDL_AudioSpec spec;
-    AppState     *as;
+    AppState *as;
 
-    as                   = (AppState *)SDL_calloc(1, sizeof(AppState));
-    as->keyboard_state   = SDL_GetKeyboardState(NULL);
-    as->chip8_context.PC = ROM_GAME_ADDRESS_START;
-    as->ipf              = INSTRUCTIONS_PER_FRAME;
-    as->fps              = FRAMES_PER_SECOND;
-    as->need_redraw      = false;
-    as->stop_execution   = false;
-    *appstate            = as;
+    as                      = (AppState *)SDL_calloc(1, sizeof(AppState));
+    as->keyboard_state      = SDL_GetKeyboardState(NULL);
+    as->chip8_context.PC    = ROM_GAME_ADDRESS_START;
+    as->ipf                 = INSTRUCTIONS_PER_FRAME;
+    as->fps                 = FRAMES_PER_SECOND;
+    as->need_redraw         = false;
+    as->stop_execution      = false;
+    as->audio_playing       = false;
+    as->current_sine_sample = 0;
+
+    *appstate               = as;
 
     memcpy(as->chip8_context.keyboard_keys, keys, sizeof(keys));
     SDL_zeroa(as->chip8_context.display_cells);
     srand((Uint32)time(NULL));
 
-    if (!as || !sdl_app_init() || !sdl_load_wav(as, &spec) ||
-        !sdl_create_audio_stream(as, &spec) ||
+    if (!as || !sdl_app_init() || !sdl_create_audio_stream(as) ||
         !sdl_create_window_and_renderer(as) ||
-        !parse_command_line_args(argc, argv, as) || !read_rom_file(as))
+        !parse_command_line_args(argc, argv, as) || !read_rom_file(as) ||
+        !SDL_ResumeAudioStreamDevice(as->stream))
         return SDL_APP_FAILURE;
 
     as->nanoseconds_per_frame = NANOSECONDS_IN_SECOND / as->fps;
@@ -1059,6 +1056,51 @@ void draw_screen(AppState *appstate)
     SDL_RenderPresent(appstate->renderer);
 }
 
+void put_attack_and_main_samples_into_stream(AppState *appstate)
+{
+    float     samples[SAMPLES_CHUNK_SIZE];
+    float     volume_multiplier;
+
+    const int minimum_audio = (SOUND_SAMPLE_RATE * sizeof(float)) / 5;
+
+    if (SDL_GetAudioStreamQueued(appstate->stream) < minimum_audio) {
+        for (size_t i = 0; i < SDL_arraysize(samples); i++) {
+            const float phase = (float)appstate->current_sine_sample *
+                                SOUND_NOTE_FREQUENCY / (float)SOUND_SAMPLE_RATE;
+            samples[i]        = SDL_sinf(phase * 2 * SDL_PI_F);
+
+            if (appstate->current_sine_sample < ATTACK_RELEASE_SAMPLES_LEN) {
+                volume_multiplier = (float)i / ATTACK_RELEASE_SAMPLES_LEN;
+                samples[i] *= volume_multiplier;
+            }
+
+            appstate->current_sine_sample++;
+        }
+        appstate->current_sine_sample %= SOUND_SAMPLE_RATE;
+
+        SDL_PutAudioStreamData(appstate->stream, samples, sizeof(samples));
+    }
+}
+
+void put_release_samples_into_stream(AppState *appstate)
+{
+    float samples[ATTACK_RELEASE_SAMPLES_LEN];
+    float volume_multiplier;
+
+    for (size_t i = 0; i < SDL_arraysize(samples); i++) {
+        const float phase = (float)appstate->current_sine_sample *
+                            SOUND_NOTE_FREQUENCY / (float)SOUND_SAMPLE_RATE;
+
+        volume_multiplier = (ATTACK_RELEASE_SAMPLES_LEN - 1 - (float)i) /
+                            (float)(ATTACK_RELEASE_SAMPLES_LEN - 1);
+        samples[i]        = volume_multiplier * SDL_sinf(phase * 2 * SDL_PI_F);
+        appstate->current_sine_sample++;
+    }
+    appstate->current_sine_sample = 0;
+
+    SDL_PutAudioStreamData(appstate->stream, samples, sizeof(samples));
+}
+
 /*
  * Process single iteration of program's main loop.
  */
@@ -1077,15 +1119,16 @@ SDL_AppResult SDL_AppIterate(void *appstate)
 
     if (as->chip8_context.delay_timer > 0)
         --as->chip8_context.delay_timer;
+
     if (as->chip8_context.sound_timer > 0) {
-        SDL_ResumeAudioStreamDevice(as->stream);
-        if (SDL_GetAudioStreamQueued(as->stream) < (int)as->wav_data_len) {
-            SDL_PutAudioStreamData(as->stream, as->wav_data,
-                                   (int)as->wav_data_len);
-        }
+        put_attack_and_main_samples_into_stream(as);
+
+        as->audio_playing = true;
         --as->chip8_context.sound_timer;
-    } else {
-        SDL_PauseAudioStreamDevice(as->stream);
+    } else if (as->audio_playing) {
+        put_release_samples_into_stream(as);
+
+        as->audio_playing = false;
     }
 
     if (as->need_redraw && !as->chip8_context.vblank_sync) {
@@ -1130,7 +1173,6 @@ void SDL_AppQuit(void *appstate, SDL_UNUSED SDL_AppResult result)
         AppState *as = (AppState *)appstate;
         SDL_DestroyRenderer(as->renderer);
         SDL_DestroyWindow(as->window);
-        SDL_free(as->wav_data);
         SDL_free(as);
     }
 }
