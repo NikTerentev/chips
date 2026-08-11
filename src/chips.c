@@ -715,6 +715,7 @@ static void instruction_Ex9E(AppState *appstate, char **message,
                      "Key %zx is pressed, next instruction skipped.",
                      (size_t)key_scancode);
     }
+    snprintf(*message, 256, "Key %zx is not pressed.", (size_t)key_scancode);
 }
 
 static void instruction_ExA1(AppState *appstate, char **message,
@@ -730,6 +731,7 @@ static void instruction_ExA1(AppState *appstate, char **message,
                      "Key %zx is NOT pressed, next instruction skipped.",
                      (size_t)key_scancode);
     }
+    snprintf(*message, 256, "Key %zx is pressed.", (size_t)key_scancode);
 }
 
 static void instruction_Fx07(AppState *appstate, char **message,
@@ -873,6 +875,9 @@ static void decode_instruction(AppState *appstate, char **message,
     Uint16 second_third_and_fourth_nibbles =
         GET_SECOND_THIRD_AND_FOURTH_NIBBLES(instruction);
 
+    const char not_an_instruction_message[] =
+        "Not an original Chip-8 instruction";
+
     switch (first_nibble) {
     case 0x0:
         switch (fourth_nibble) {
@@ -883,7 +888,7 @@ static void decode_instruction(AppState *appstate, char **message,
             instruction_00EE(appstate, message);
             break;
         default:
-            snprintf(*message, 256, "Not an original Chip-8 instruction");
+            snprintf(*message, 256, not_an_instruction_message);
             appstate->stop_execution = true;
             break;
         }
@@ -943,7 +948,7 @@ static void decode_instruction(AppState *appstate, char **message,
             instruction_8xyE(appstate, message, second_nibble, third_nibble);
             break;
         default:
-            snprintf(*message, 256, "Not an original Chip-8 instruction");
+            snprintf(*message, 256, not_an_instruction_message);
             appstate->stop_execution = true;
             break;
         }
@@ -975,7 +980,7 @@ static void decode_instruction(AppState *appstate, char **message,
             instruction_ExA1(appstate, message, second_nibble);
             break;
         default:
-            snprintf(*message, 256, "Not an original Chip-8 instruction");
+            snprintf(*message, 256, not_an_instruction_message);
             appstate->stop_execution = true;
             break;
         }
@@ -1010,13 +1015,13 @@ static void decode_instruction(AppState *appstate, char **message,
             instruction_Fx65(appstate, message, second_nibble);
             break;
         default:
-            snprintf(*message, 256, "Not an original Chip-8 instruction");
+            snprintf(*message, 256, not_an_instruction_message);
             appstate->stop_execution = true;
             break;
         }
         break;
     default:
-        snprintf(*message, 256, "Not an original Chip-8 instruction");
+        snprintf(*message, 256, not_an_instruction_message);
         appstate->stop_execution = true;
         break;
     }
