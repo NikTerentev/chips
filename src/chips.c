@@ -862,8 +862,11 @@ static void instruction_Fx65(AppState *appstate, char **message,
                  second_nibble);
 }
 
-static void decode_instruction(AppState *appstate, char **message,
-                               Uint16 instruction)
+/*
+ * Execute instruction by its opcode
+ */
+static void execute_instruction(AppState *appstate, char **message,
+                                Uint16 instruction)
 {
     /* Get first nibble (to decode) from instruction using `bit mask` and `and`
      */
@@ -1108,18 +1111,65 @@ static void put_release_samples_into_stream(AppState *appstate)
 }
 
 /*
+ * Delay the frame time if it ended earlier than necessary
+ */
+static void delay_frame_time(AppState *appstate, Uint64 start_ticks)
+{
+    Uint64 end_ticks, elapsed_ns;
+
+    end_ticks  = SDL_GetTicksNS();
+    elapsed_ns = end_ticks - start_ticks;
+    if (elapsed_ns < appstate->nanoseconds_per_frame) {
+        SDL_DelayNS(appstate->nanoseconds_per_frame - elapsed_ns);
+    }
+}
+
+/*
+ * Run the instructions that should fit in one frame.
+ */
+static bool run_frame(AppState *appstate, Uint64 start_ticks)
+{
+    Uint16 cur_instruction;
+    char   message[256];
+    char  *message_ptr;
+
+    message_ptr                         = message;
+
+    appstate->chip8_context.vblank_sync = false;
+    for (size_t instructions_count = 1; instructions_count <= appstate->ipf;
+         instructions_count++) {
+        cur_instruction = fetch_instruction(appstate);
+        execute_instruction(appstate, &message_ptr, cur_instruction);
+        if (appstate->enable_logs) {
+            printf("%04x: %s\n", cur_instruction, message);
+        }
+        if (appstate->need_redraw && !appstate->chip8_context.vblank_sync) {
+            draw_screen(appstate);
+            appstate->need_redraw               = false;
+            appstate->chip8_context.vblank_sync = true;
+        } else if (appstate->need_redraw &&
+                   appstate->chip8_context.vblank_sync) {
+            break;
+        }
+        if (appstate->stop_execution) {
+            return false;
+        }
+    }
+
+    delay_frame_time(appstate, start_ticks);
+
+    return true;
+}
+
+/*
  * Process single iteration of program's main loop.
  */
 SDL_AppResult SDL_AppIterate(void *appstate)
 {
-    Uint64    start_ticks, end_ticks;
-    char      message[256];
-    char     *message_ptr;
-    Uint64    elapsed_ns;
+    Uint64    start_ticks;
     AppState *as;
 
     as          = (AppState *)appstate;
-    message_ptr = message;
 
     start_ticks = SDL_GetTicksNS();
 
@@ -1141,32 +1191,9 @@ SDL_AppResult SDL_AppIterate(void *appstate)
         draw_screen(as);
         as->need_redraw = false;
     }
-    as->chip8_context.vblank_sync = false;
-    for (size_t instructions_count = 1; instructions_count <= as->ipf;
-         instructions_count++) {
-        Uint16 cur_instruction = fetch_instruction(as);
-        decode_instruction(as, &message_ptr, cur_instruction);
-        if (as->enable_logs) {
-            printf("%04x: %s\n", cur_instruction, message);
-        }
-        if (as->need_redraw && !as->chip8_context.vblank_sync) {
-            draw_screen(as);
-            as->need_redraw               = false;
-            as->chip8_context.vblank_sync = true;
-        } else if (as->need_redraw && as->chip8_context.vblank_sync) {
-            break;
-        }
-        if (as->stop_execution) {
-            return SDL_APP_FAILURE;
-        }
-    }
 
-    end_ticks  = SDL_GetTicksNS();
-    elapsed_ns = end_ticks - start_ticks;
-    if (elapsed_ns < as->nanoseconds_per_frame) {
-        SDL_DelayNS(as->nanoseconds_per_frame - elapsed_ns);
-    }
-
+    if (!run_frame(as, start_ticks))
+        return SDL_APP_FAILURE;
     return SDL_APP_CONTINUE;
 }
 
