@@ -17,10 +17,17 @@ sassets
 stdint
 Terentev
 terentevnikita
+Wcast
 Wconversion
 Wdeclaration
+Wdouble
 Wextra
+Wformat
+Wformat
+Wnull
 Wpedantic
+Wredundant
 Wshadow
+Wwrite
 xtrgamr
 zeroa

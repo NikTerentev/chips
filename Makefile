@@ -1,5 +1,5 @@
 CC = clang
-CFLAGS = -Wall -Wextra -g -std=gnu99 -Wdeclaration-after-statement -Wconversion -Werror -Wshadow -Wpedantic
+CFLAGS = -Wall -Wextra -g -std=gnu99 -Wdeclaration-after-statement -Wconversion -Werror -Wshadow -Wpedantic -Wredundant-decls -Wwrite-strings -Wcast-qual -Wformat -Wformat-security -Wdouble-promotion -Wnull-dereference -Wmissing-prototypes
 LDFLAGS = $(shell pkg-config --libs sdl3)
 CFLAGS += $(shell pkg-config --cflags sdl3)
 TARGET = chips

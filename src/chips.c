@@ -120,14 +120,14 @@ typedef struct {
     Uint8            ipf;
 } AppState;
 
-const Uint8 keys[] = {
+static const Uint8 keys[] = {
     SDL_SCANCODE_X, SDL_SCANCODE_1, SDL_SCANCODE_2, SDL_SCANCODE_3,
     SDL_SCANCODE_Q, SDL_SCANCODE_W, SDL_SCANCODE_E, SDL_SCANCODE_A,
     SDL_SCANCODE_S, SDL_SCANCODE_D, SDL_SCANCODE_Z, SDL_SCANCODE_C,
     SDL_SCANCODE_4, SDL_SCANCODE_R, SDL_SCANCODE_F, SDL_SCANCODE_V,
 };
 
-Uint8 DEFALT_FONT[FONT_SIZE][FONT_BYTES] = {
+static Uint8 DEFALT_FONT[FONT_SIZE][FONT_BYTES] = {
     /* 0 */
     {0xF0, 0x90, 0x90, 0x90, 0xF0},
     /* 1 */
@@ -165,7 +165,7 @@ Uint8 DEFALT_FONT[FONT_SIZE][FONT_BYTES] = {
 /*
  * Initialize SDL app.
  */
-bool sdl_app_init(void)
+static bool sdl_app_init(void)
 {
     SDL_SetAppMetadata("Chip-8 Emulator", "0.0.1", "com.example.emulator");
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)) {
@@ -178,7 +178,7 @@ bool sdl_app_init(void)
 /*
  * Create SDL audio device stream.
  */
-bool sdl_create_audio_stream(AppState *as)
+static bool sdl_create_audio_stream(AppState *as)
 {
     SDL_AudioSpec spec;
 
@@ -198,7 +198,7 @@ bool sdl_create_audio_stream(AppState *as)
 /*
  * Create SDL window and renderer.
  */
-bool sdl_create_window_and_renderer(AppState *as)
+static bool sdl_create_window_and_renderer(AppState *as)
 {
     if (!SDL_CreateWindowAndRenderer("examples/emulator/chip-8",
                                      SDL_WINDOW_WIDTH, SDL_WINDOW_HEIGHT, 0,
@@ -212,7 +212,7 @@ bool sdl_create_window_and_renderer(AppState *as)
 /*
  * Parse command line args.
  */
-bool parse_command_line_args(int argc, char *argv[], AppState *appstate)
+static bool parse_command_line_args(int argc, char *argv[], AppState *appstate)
 {
     Uint8 fps, ipf;
     int   opt;
@@ -260,7 +260,7 @@ bool parse_command_line_args(int argc, char *argv[], AppState *appstate)
 /*
  * Read passed on startup rom file path.
  */
-bool read_rom_file(AppState *appstate)
+static bool read_rom_file(AppState *appstate)
 {
     Uint32 rom_file_size;
     long   ftell_result;
@@ -302,7 +302,7 @@ bool read_rom_file(AppState *appstate)
 /*
  * Load CHIP8 standard font into RAM.
  */
-void load_font(AppState *appstate)
+static void load_font(AppState *appstate)
 {
     Uint8 offset;
 
@@ -367,7 +367,7 @@ SDL_AppResult SDL_AppEvent(SDL_UNUSED void *appstate, SDL_Event *event)
     }
 }
 
-Uint16 fetch_instruction(AppState *appstate)
+static Uint16 fetch_instruction(AppState *appstate)
 {
     Uint16 instruction =
         (Uint16)((appstate->chip8_context.RAM[appstate->chip8_context.PC]
@@ -377,13 +377,13 @@ Uint16 fetch_instruction(AppState *appstate)
     return instruction;
 }
 
-Uint8 get_display_cell(AppState *appstate, Uint16 row, Uint16 col)
+static Uint8 get_display_cell(AppState *appstate, Uint16 row, Uint16 col)
 {
     Uint32 shift = CHIP8_DISPLAY_WIDTH - col - 1;
     return (appstate->chip8_context.display_cells[row] >> shift & 0x1);
 }
 
-void stack_push_instruction(Uint16 instruction, AppState *appstate)
+static void stack_push_instruction(Uint16 instruction, AppState *appstate)
 {
     if (appstate->chip8_context.SP >= 16) {
         exit(1);
@@ -391,7 +391,7 @@ void stack_push_instruction(Uint16 instruction, AppState *appstate)
     appstate->chip8_context.stack[++appstate->chip8_context.SP] = instruction;
 }
 
-Uint16 stack_pop_instruction(AppState *appstate)
+static Uint16 stack_pop_instruction(AppState *appstate)
 {
     if (appstate->chip8_context.SP > 0) {
         return appstate->chip8_context.stack[appstate->chip8_context.SP--];
@@ -860,7 +860,8 @@ static void instruction_Fx65(AppState *appstate, char **message,
                  second_nibble);
 }
 
-void decode_instruction(AppState *appstate, char **message, Uint16 instruction)
+static void decode_instruction(AppState *appstate, char **message,
+                               Uint16 instruction)
 {
     /* Get first nibble (to decode) from instruction using `bit mask` and `and`
      */
@@ -1027,7 +1028,7 @@ static void set_rect_xy_(SDL_FRect *r, Uint16 x, Uint16 y)
     r->y = (float)(y * PIXEL_SIZE);
 }
 
-void draw_screen(AppState *appstate)
+static void draw_screen(AppState *appstate)
 {
     Uint8     display_cell;
     Uint16    i, j;
@@ -1056,7 +1057,7 @@ void draw_screen(AppState *appstate)
     SDL_RenderPresent(appstate->renderer);
 }
 
-void put_attack_and_main_samples_into_stream(AppState *appstate)
+static void put_attack_and_main_samples_into_stream(AppState *appstate)
 {
     float     samples[SAMPLES_CHUNK_SIZE];
     float     volume_multiplier;
@@ -1082,7 +1083,7 @@ void put_attack_and_main_samples_into_stream(AppState *appstate)
     }
 }
 
-void put_release_samples_into_stream(AppState *appstate)
+static void put_release_samples_into_stream(AppState *appstate)
 {
     float samples[ATTACK_RELEASE_SAMPLES_LEN];
     float volume_multiplier;
