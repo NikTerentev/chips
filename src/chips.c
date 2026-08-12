@@ -70,6 +70,8 @@
 typedef struct {
     /* 64 x 32 black and white screen cells. */
     Uint64 display_cells[CHIP8_DISPLAY_MATRIX_SIZE / 64U];
+    /* Prevent rendering more than once per frame. */
+    bool   sprite_drawn_this_frame;
     /*
      * Keyboard mapping.
      * Index of button - Button of real keyboard.
@@ -86,8 +88,6 @@ typedef struct {
      * gives off a beeping sound as long as it’s not 0.
      */
     Uint8  sound_timer;
-    /* Prevent rendering more than once per frame. */
-    bool   vblank_sync;
     /* Stack. */
     Uint16 stack[16];
     /*
@@ -1276,31 +1276,40 @@ static void delay_frame_time(AppState *appstate, Uint64 start_ticks)
  */
 static bool run_frame(AppState *appstate, Uint64 start_ticks)
 {
+    bool   dxyn_instruction;
     Uint16 cur_instruction;
     char   message[256];
     char  *message_ptr;
 
-    message_ptr                         = message;
+    message_ptr                                     = message;
 
-    appstate->chip8_context.vblank_sync = false;
+    appstate->chip8_context.sprite_drawn_this_frame = false;
     for (size_t instructions_count = 1; instructions_count <= appstate->ipf;
          instructions_count++) {
-        cur_instruction = fetch_instruction(appstate);
+        cur_instruction  = fetch_instruction(appstate);
+
+        dxyn_instruction = GET_FIRST_NIBBLE(cur_instruction) == 0xD;
+        if (dxyn_instruction &&
+            !appstate->chip8_context.sprite_drawn_this_frame) {
+            appstate->chip8_context.sprite_drawn_this_frame = true;
+        } else if (dxyn_instruction &&
+                   appstate->chip8_context.sprite_drawn_this_frame) {
+            appstate->chip8_context.PC -= 2;
+            break;
+        }
+
         execute_instruction(appstate, &message_ptr, cur_instruction);
         if (appstate->enable_logs) {
             printf("%04x: %s\n", cur_instruction, message);
         }
-        if (appstate->need_redraw && !appstate->chip8_context.vblank_sync) {
-            draw_screen(appstate);
-            appstate->need_redraw               = false;
-            appstate->chip8_context.vblank_sync = true;
-        } else if (appstate->need_redraw &&
-                   appstate->chip8_context.vblank_sync) {
-            break;
-        }
         if (appstate->stop_execution) {
             return false;
         }
+    }
+
+    if (appstate->need_redraw) {
+        draw_screen(appstate);
+        appstate->need_redraw = false;
     }
 
     delay_frame_time(appstate, start_ticks);
@@ -1332,11 +1341,6 @@ SDL_AppResult SDL_AppIterate(void *appstate)
         put_release_samples_into_stream(as);
 
         as->audio_playing = false;
-    }
-
-    if (as->need_redraw && !as->chip8_context.vblank_sync) {
-        draw_screen(as);
-        as->need_redraw = false;
     }
 
     if (!run_frame(as, start_ticks))
