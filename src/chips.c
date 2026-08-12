@@ -1,5 +1,5 @@
 /*
- * Use the callbacks instead of main()
+ * Use the callbacks instead of main().
  */
 #define SDL_MAIN_USE_CALLBACKS 1
 #include <SDL3/SDL.h>
@@ -68,58 +68,75 @@
 #define GET_FOURTH_NIBBLE(instruction)           (instruction & 0xF)
 
 typedef struct {
-    /* 64 x 32 black and white screen cells */
+    /* 64 x 32 black and white screen cells. */
     Uint64 display_cells[CHIP8_DISPLAY_MATRIX_SIZE / 64U];
     /*
-    Keyboard mapping
-    Index of button - Button of real keyboard
-    */
+     * Keyboard mapping.
+     * Index of button - Button of real keyboard.
+     */
     Uint8  keyboard_keys[16];
     /* Memory */
     Uint8  RAM[RAM_SIZE];
     /*
-     * Decremented at a rate of 60 Hz (60 times per second) until it reaches 0
+     * Decremented at a rate of 60 Hz (60 times per second) until it reaches 0.
      */
     Uint8  delay_timer;
     /*
-    Sound timer which functions like the delay timer, but which also
-    gives off a beeping sound as long as it’s not 0
-    */
+     * Sound timer which functions like the delay timer, but which also
+     * gives off a beeping sound as long as it’s not 0.
+     */
     Uint8  sound_timer;
-    /* Prevent rendering more than once per frame */
+    /* Prevent rendering more than once per frame. */
     bool   vblank_sync;
-    /* Stack */
+    /* Stack. */
     Uint16 stack[16];
     /*
-    General-purpose variable registers numbered 0 through F hexadecimal,
-    ie. 0 through 15 in decimal, called V0 through VF
-    */
+     * General-purpose variable registers numbered 0 through F hexadecimal,
+     * ie. 0 through 15 in decimal, called V0 through VF.
+     */
     Uint8  V[16];
-    /* Points at the current instruction in memory */
+    /* Points at the current instruction in memory. */
     Uint16 PC;
-    /* Stack pointer */
+    /* Stack pointer. */
     Uint8  SP;
-    /* Points at locations in memory */
+    /* Points at locations in memory. */
     Uint16 I;
 } CHIP8Context;
 
 typedef struct {
+    /* Time allocated for one frame. */
     Uint64           nanoseconds_per_frame;
+    /* The current point on the sine wave. */
     int              current_sine_sample;
+    /* Snapshot of the current state of the keyboard. */
     const bool      *keyboard_state;
+    /* Flag - stop execution on unknown opcode. */
     bool             stop_execution;
+    /* Rom file path. */
     char            *rom_file_path;
+    /* Chip-8 context. */
     CHIP8Context     chip8_context;
+    /* Flag - is audio playing right now. */
     bool             audio_playing;
+    /* Flag - should call draw screen function. */
     bool             need_redraw;
+    /* Flag - print or not opcode logs. */
     bool             enable_logs;
+    /* SDL renderer link. */
     SDL_Renderer    *renderer;
+    /* SDL window link. */
     SDL_Window      *window;
+    /* SDL audio stream link. */
     SDL_AudioStream *stream;
+    /* FPS Number (frames per second). */
     Uint8            fps;
+    /* IPF Number (instructions per frame). */
     Uint8            ipf;
 } AppState;
 
+/*
+ * Keyboard keys with their number as index.
+ */
 static const Uint8 keys[] = {
     SDL_SCANCODE_X, SDL_SCANCODE_1, SDL_SCANCODE_2, SDL_SCANCODE_3,
     SDL_SCANCODE_Q, SDL_SCANCODE_W, SDL_SCANCODE_E, SDL_SCANCODE_A,
@@ -127,6 +144,9 @@ static const Uint8 keys[] = {
     SDL_SCANCODE_4, SDL_SCANCODE_R, SDL_SCANCODE_F, SDL_SCANCODE_V,
 };
 
+/*
+ * Default Chip-8 font sprites.
+ */
 static Uint8 DEFALT_FONT[FONT_SIZE][FONT_BYTES] = {
     /* 0 */
     {0xF0, 0x90, 0x90, 0x90, 0xF0},
@@ -273,7 +293,7 @@ static bool read_rom_file(AppState *appstate)
         return false;
     }
 
-    /* Calculate file length */
+    /* Calculate file length. */
     fseek(fp, 0, SEEK_END);
     ftell_result = ftell(fp);
     if (ftell_result < 0) {
@@ -300,7 +320,7 @@ static bool read_rom_file(AppState *appstate)
 }
 
 /*
- * Load CHIP8 standard font into RAM.
+ * Load Chip-8 standard font into RAM.
  */
 static void load_font(AppState *appstate)
 {
@@ -367,6 +387,9 @@ SDL_AppResult SDL_AppEvent(SDL_UNUSED void *appstate, SDL_Event *event)
     }
 }
 
+/*
+ * Fetch next instruction from RAM.
+ */
 static Uint16 fetch_instruction(AppState *appstate)
 {
     Uint16 instruction =
@@ -377,12 +400,18 @@ static Uint16 fetch_instruction(AppState *appstate)
     return instruction;
 }
 
+/*
+ * Get display cell on provided row and column.
+ */
 static Uint8 get_display_cell(AppState *appstate, Uint16 row, Uint16 col)
 {
     Uint32 shift = CHIP8_DISPLAY_WIDTH - col - 1;
     return (appstate->chip8_context.display_cells[row] >> shift & 0x1);
 }
 
+/*
+ * Push instruction into stack.
+ */
 static void stack_push_instruction(Uint16 instruction, AppState *appstate)
 {
     if (appstate->chip8_context.SP >= 16) {
@@ -391,6 +420,9 @@ static void stack_push_instruction(Uint16 instruction, AppState *appstate)
     appstate->chip8_context.stack[++appstate->chip8_context.SP] = instruction;
 }
 
+/*
+ * Pop instruction from stack.
+ */
 static Uint16 stack_pop_instruction(AppState *appstate)
 {
     if (appstate->chip8_context.SP > 0) {
@@ -399,6 +431,9 @@ static Uint16 stack_pop_instruction(AppState *appstate)
     return 0;
 }
 
+/*
+ * Clear the display.
+ */
 static void instruction_00E0(AppState *appstate, char **message)
 {
     SDL_memset(appstate->chip8_context.display_cells, 0,
@@ -408,6 +443,9 @@ static void instruction_00E0(AppState *appstate, char **message)
         snprintf(*message, 256, "Clear the display");
 }
 
+/*
+ * Return from a subroutine.
+ */
 static void instruction_00EE(AppState *appstate, char **message)
 {
     appstate->chip8_context.PC = stack_pop_instruction(appstate);
@@ -415,6 +453,9 @@ static void instruction_00EE(AppState *appstate, char **message)
         snprintf(*message, 256, "Returning from a subroutine");
 }
 
+/*
+ * Jump to location nnn.
+ */
 static void instruction_1nnn(AppState *appstate, char **message,
                              Uint16 second_third_and_fourth_nibbles)
 {
@@ -424,6 +465,9 @@ static void instruction_1nnn(AppState *appstate, char **message,
                  second_third_and_fourth_nibbles);
 }
 
+/*
+ * Call subroutine at nnn.
+ */
 static void instruction_2nnn(AppState *appstate, char **message,
                              Uint16 second_third_and_fourth_nibbles)
 {
@@ -434,6 +478,9 @@ static void instruction_2nnn(AppState *appstate, char **message,
                  second_third_and_fourth_nibbles);
 }
 
+/*
+ * Skip next instruction if Vx = kk.
+ */
 static void instruction_3xkk(AppState *appstate, char **message,
                              Uint8 second_nibble,
                              Uint8 third_and_fourth_nibbles)
@@ -446,6 +493,9 @@ static void instruction_3xkk(AppState *appstate, char **message,
                  second_nibble, third_and_fourth_nibbles);
 }
 
+/*
+ * Skip next instruction if Vx != kk.
+ */
 static void instruction_4xkk(AppState *appstate, char **message,
                              Uint8 second_nibble,
                              Uint8 third_and_fourth_nibbles)
@@ -459,6 +509,9 @@ static void instruction_4xkk(AppState *appstate, char **message,
                  second_nibble, third_and_fourth_nibbles);
 }
 
+/*
+ * Skip next instruction if Vx = Vy.
+ */
 static void instruction_5xy0(AppState *appstate, char **message,
                              Uint8 second_nibble, Uint8 third_nibble)
 {
@@ -471,6 +524,9 @@ static void instruction_5xy0(AppState *appstate, char **message,
                  second_nibble, third_nibble);
 }
 
+/*
+ * Set Vx = kk.
+ */
 static void instruction_6xkk(AppState *appstate, char **message,
                              Uint8 second_nibble,
                              Uint8 third_and_fourth_nibbles)
@@ -481,6 +537,9 @@ static void instruction_6xkk(AppState *appstate, char **message,
                  third_and_fourth_nibbles, second_nibble);
 }
 
+/*
+ * Set Vx = Vx + kk.
+ */
 static void instruction_7xkk(AppState *appstate, char **message,
                              Uint8 second_nibble,
                              Uint8 third_and_fourth_nibbles)
@@ -491,6 +550,9 @@ static void instruction_7xkk(AppState *appstate, char **message,
                  third_and_fourth_nibbles, second_nibble);
 }
 
+/*
+ * Set Vx = Vy.
+ */
 static void instruction_8xy0(AppState *appstate, char **message,
                              Uint8 second_nibble, Uint8 third_nibble)
 {
@@ -501,6 +563,9 @@ static void instruction_8xy0(AppState *appstate, char **message,
                  third_nibble);
 }
 
+/*
+ * Set Vx = Vx OR Vy.
+ */
 static void instruction_8xy1(AppState *appstate, char **message,
                              Uint8 second_nibble, Uint8 third_nibble)
 {
@@ -512,6 +577,9 @@ static void instruction_8xy1(AppState *appstate, char **message,
                  second_nibble, second_nibble, third_nibble);
 }
 
+/*
+ * Set Vx = Vx AND Vy.
+ */
 static void instruction_8xy2(AppState *appstate, char **message,
                              Uint8 second_nibble, Uint8 third_nibble)
 {
@@ -523,6 +591,9 @@ static void instruction_8xy2(AppState *appstate, char **message,
                  second_nibble, second_nibble, third_nibble);
 }
 
+/*
+ * Set Vx = Vx XOR Vy.
+ */
 static void instruction_8xy3(AppState *appstate, char **message,
                              Uint8 second_nibble, Uint8 third_nibble)
 {
@@ -534,6 +605,9 @@ static void instruction_8xy3(AppState *appstate, char **message,
                  second_nibble, second_nibble, third_nibble);
 }
 
+/*
+ * Set Vx = Vx + Vy, set VF = carry.
+ */
 static void instruction_8xy4(AppState *appstate, char **message,
                              Uint8 second_nibble, Uint8 third_nibble)
 {
@@ -550,6 +624,9 @@ static void instruction_8xy4(AppState *appstate, char **message,
                  second_nibble, second_nibble, third_nibble);
 }
 
+/*
+ * Set Vx = Vx - Vy, set VF = NOT borrow.
+ */
 static void instruction_8xy5(AppState *appstate, char **message,
                              Uint8 second_nibble, Uint8 third_nibble)
 {
@@ -566,6 +643,9 @@ static void instruction_8xy5(AppState *appstate, char **message,
                  second_nibble, second_nibble, third_nibble);
 }
 
+/*
+ * Set Vx = Vx SHR 1.
+ */
 static void instruction_8xy6(AppState *appstate, char **message,
                              Uint8 second_nibble, Uint8 third_nibble)
 {
@@ -584,6 +664,9 @@ static void instruction_8xy6(AppState *appstate, char **message,
         snprintf(*message, 256, "Right shift V%x", second_nibble);
 }
 
+/*
+ * Set Vx = Vy - Vx, set VF = NOT borrow.
+ */
 static void instruction_8xy7(AppState *appstate, char **message,
                              Uint8 second_nibble, Uint8 third_nibble)
 {
@@ -602,6 +685,9 @@ static void instruction_8xy7(AppState *appstate, char **message,
                  second_nibble, third_nibble, second_nibble);
 }
 
+/*
+ * Set Vx = Vx SHL 1.
+ */
 static void instruction_8xyE(AppState *appstate, char **message,
                              Uint8 second_nibble, Uint8 third_nibble)
 {
@@ -620,6 +706,9 @@ static void instruction_8xyE(AppState *appstate, char **message,
         snprintf(*message, 256, "Left shift V%x", second_nibble);
 }
 
+/*
+ * Skip next instruction if Vx != Vy.
+ */
 static void instruction_9xy0(AppState *appstate, char **message,
                              Uint8 second_nibble, Uint8 third_nibble)
 {
@@ -633,6 +722,9 @@ static void instruction_9xy0(AppState *appstate, char **message,
                  second_nibble, third_nibble);
 }
 
+/*
+ * Set I = nnn.
+ */
 static void instruction_Annn(AppState *appstate, char **message,
                              Uint16 second_third_and_fourth_nibbles)
 {
@@ -642,6 +734,9 @@ static void instruction_Annn(AppState *appstate, char **message,
                  second_third_and_fourth_nibbles);
 }
 
+/*
+ * Jump to location nnn + V0.
+ */
 static void instruction_Bnnn(AppState *appstate, char **message,
                              Uint8  second_nibble,
                              Uint16 second_third_and_fourth_nibbles)
@@ -653,6 +748,9 @@ static void instruction_Bnnn(AppState *appstate, char **message,
                  second_third_and_fourth_nibbles, second_nibble);
 }
 
+/*
+ * Set Vx = random byte AND kk.
+ */
 static void instruction_Cxkk(AppState *appstate, char **message,
                              Uint8 second_nibble,
                              Uint8 third_and_fourth_nibbles)
@@ -663,6 +761,10 @@ static void instruction_Cxkk(AppState *appstate, char **message,
         snprintf(*message, 256, "Generate random number: %x", random_number);
 }
 
+/*
+ * Display n-byte sprite starting at memory location I at (Vx, Vy),
+ * set VF = collision.
+ */
 static void instruction_dxyn(AppState *appstate, char **message,
                              Uint8 second_nibble, Uint8 third_nibble,
                              Uint8 fourth_nibble)
@@ -702,6 +804,9 @@ static void instruction_dxyn(AppState *appstate, char **message,
             fourth_nibble, second_nibble, third_nibble);
 }
 
+/*
+ * Skip next instruction if key with the value of Vx is pressed.
+ */
 static void instruction_Ex9E(AppState *appstate, char **message,
                              Uint8 second_nibble)
 {
@@ -718,6 +823,9 @@ static void instruction_Ex9E(AppState *appstate, char **message,
     snprintf(*message, 256, "Key %zx is not pressed.", (size_t)key_scancode);
 }
 
+/*
+ * Skip next instruction if key with the value of Vx is not pressed.
+ */
 static void instruction_ExA1(AppState *appstate, char **message,
                              Uint8 second_nibble)
 {
@@ -734,6 +842,9 @@ static void instruction_ExA1(AppState *appstate, char **message,
     snprintf(*message, 256, "Key %zx is pressed.", (size_t)key_scancode);
 }
 
+/*
+ * Set Vx = delay timer value.
+ */
 static void instruction_Fx07(AppState *appstate, char **message,
                              Uint8 second_nibble)
 {
@@ -743,6 +854,9 @@ static void instruction_Fx07(AppState *appstate, char **message,
         snprintf(*message, 256, "Set delay timer to V%x", second_nibble);
 }
 
+/*
+ * Wait for a key press, store the value of the key in Vx.
+ */
 static void instruction_Fx0A(AppState *appstate, char **message,
                              Uint8 second_nibble)
 {
@@ -767,6 +881,9 @@ static void instruction_Fx0A(AppState *appstate, char **message,
     }
 }
 
+/*
+ * Set delay timer = Vx.
+ */
 static void instruction_Fx15(AppState *appstate, char **message,
                              Uint8 second_nibble)
 {
@@ -776,6 +893,9 @@ static void instruction_Fx15(AppState *appstate, char **message,
         snprintf(*message, 256, "Set V%x to delay timer", second_nibble);
 }
 
+/*
+ * Set sound timer = Vx.
+ */
 static void instruction_Fx18(AppState *appstate, char **message,
                              Uint8 second_nibble)
 {
@@ -785,6 +905,9 @@ static void instruction_Fx18(AppState *appstate, char **message,
         snprintf(*message, 256, "Set V%x to sound timer", second_nibble);
 }
 
+/*
+ * Set I = I + Vx.
+ */
 static void instruction_Fx1E(AppState *appstate, char **message,
                              Uint8 second_nibble)
 {
@@ -793,6 +916,9 @@ static void instruction_Fx1E(AppState *appstate, char **message,
         snprintf(*message, 256, "Set I = I + V%x", second_nibble);
 }
 
+/*
+ * Set I = location of sprite for digit Vx.
+ */
 static void instruction_Fx29(AppState *appstate, char **message,
                              Uint8 second_nibble)
 {
@@ -801,10 +927,13 @@ static void instruction_Fx29(AppState *appstate, char **message,
         snprintf(*message, 256, "Point I to the %x character", second_nibble);
 }
 
+/*
+ * Store BCD representation of Vx in memory locations I, I+1, and I+2.
+ */
 static void instruction_Fx33(AppState *appstate, char **message,
                              Uint8 second_nibble)
 {
-    /* We need to split VX number to three decimal digits */
+    /* We need to split VX number to three decimal digits. */
     Uint8 v_number = appstate->chip8_context.V[second_nibble];
     Uint8 number;
     Uint8 decimal_base = 10;
@@ -821,6 +950,9 @@ static void instruction_Fx33(AppState *appstate, char **message,
                  second_nibble);
 }
 
+/*
+ * Store registers V0 through Vx in memory starting at location I.
+ */
 static void instruction_Fx55(AppState *appstate, char **message,
                              Uint8 second_nibble)
 {
@@ -842,6 +974,9 @@ static void instruction_Fx55(AppState *appstate, char **message,
             second_nibble);
 }
 
+/*
+ * Read registers V0 through Vx from memory starting at location I.
+ */
 static void instruction_Fx65(AppState *appstate, char **message,
                              Uint8 second_nibble)
 {
@@ -863,12 +998,12 @@ static void instruction_Fx65(AppState *appstate, char **message,
 }
 
 /*
- * Execute instruction by its opcode
+ * Execute instruction by its opcode.
  */
 static void execute_instruction(AppState *appstate, char **message,
                                 Uint16 instruction)
 {
-    /* Get first nibble (to decode) from instruction using `bit mask` and `and`
+    /* Get first nibble (to decode) from instruction using `bit mask` and `and`.
      */
     Uint8  first_nibble             = GET_FIRST_NIBBLE(instruction);
     Uint8  second_nibble            = GET_SECOND_NIBBLE(instruction);
@@ -1030,12 +1165,18 @@ static void execute_instruction(AppState *appstate, char **message,
     }
 }
 
+/*
+ * Set rectangle x and y coordinates of top-left corner.
+ */
 static void set_rect_xy_(SDL_FRect *r, Uint16 x, Uint16 y)
 {
     r->x = (float)(x * PIXEL_SIZE);
     r->y = (float)(y * PIXEL_SIZE);
 }
 
+/*
+ * Draw Chip-8 screen with sprites.
+ */
 static void draw_screen(AppState *appstate)
 {
     Uint8     display_cell;
@@ -1065,6 +1206,9 @@ static void draw_screen(AppState *appstate)
     SDL_RenderPresent(appstate->renderer);
 }
 
+/*
+ * Put attack and main audio samples into stream.
+ */
 static void put_attack_and_main_samples_into_stream(AppState *appstate)
 {
     float     samples[SAMPLES_CHUNK_SIZE];
@@ -1091,6 +1235,9 @@ static void put_attack_and_main_samples_into_stream(AppState *appstate)
     }
 }
 
+/*
+ * Put release audio sample into stream.
+ */
 static void put_release_samples_into_stream(AppState *appstate)
 {
     float samples[ATTACK_RELEASE_SAMPLES_LEN];
@@ -1111,7 +1258,7 @@ static void put_release_samples_into_stream(AppState *appstate)
 }
 
 /*
- * Delay the frame time if it ended earlier than necessary
+ * Delay the frame time if it ended earlier than necessary.
  */
 static void delay_frame_time(AppState *appstate, Uint64 start_ticks)
 {
