@@ -1,57 +1,50 @@
 # Changelog
 
-## 0.0.6
+## 0.10.0
 
-- Rework IPF and FPS logic;
-- Add support of CXNN instruction;
-- Add `-d` flag to enable instruction logs;
+- Refactor frame vblank wait.
 
-## 0.0.5
+## 0.9.0
 
-Add collision tracking
+- Replace use of wav sample with sine wave.
 
-Now,
-[Quirks test](https://github.com/Timendus/chip8-test-suite#quirks-test)
-is supported:
+## 0.8.0
 
-![Running Quirks test](../images/running_quirks_test.png)
+- Update arguments parsing.
 
-## 0.0.4
+## 0.7.0
 
-Fix 8x.. opcodes.
+- Improve handling of unknown instructions.
 
-Now,
-[Flags test](https://github.com/Timendus/chip8-test-suite/tree/main?tab=readme-ov-file#flags-test)
-is supported:
+## 0.6.0
 
-![Running Flags test](../images/running_flags_test.gif)
+- Rework IPF and FPS logic.
+- Add support of CXNN instruction.
+- Add `-d` flag to enable instruction logs.
 
-## 0.0.3
+## 0.5.0
+
+- Add collision tracking.
+- Now, [Quirks test](https://github.com/Timendus/chip8-test-suite#quirks-test) is supported.
+
+## 0.4.0
+
+- Fix 8x.. opcodes.
+- Now, [Flags test](https://github.com/Timendus/chip8-test-suite/tree/main?tab=readme-ov-file#flags-test) is supported.
+
+## 0.3.0
 
 - Add support of FX33, FX55, FX65, ....
 - Fix bugs with existed opcodes.
+- Now, [Corax+ opcode test](https://github.com/Timendus/chip8-test-suite/tree/main#corax-opcode-test) is supported.
 
-Now,
-[Corax+ opcode test](https://github.com/Timendus/chip8-test-suite/tree/main#corax-opcode-test)
-is supported:
+## 0.2.0
 
-![Running Corax+ opcode test](../images/running_corax+_opcode_test.gif)
+- Add support of few new opcodes - finished 8xyN, and some single opcodes
+  from other categories.
+- More ROMs are supported now!
 
-## 0.0.2
+## 0.1.0
 
-Add support of few new opcodes - finished 8xyN, and some single opcodes
-from other categories.
-
-More ROMs are supported now!
-
-![Running Octojam 1 Title](../images/running_octojam_1_title.gif)
-
-## 0.0.1
-
-Add support of all opcodes for running basic IBM program:
-
-![Running IBM program](../images/running_IBM_program.png)
-
-Also add partial support of [test rom](https://github.com/corax89/chip8-test-rom):
-
-![Running test rom](../images/running_test_rom.png)
+- Add support of all opcodes for running basic IBM program.
+- Also add partial support of [test rom](https://github.com/corax89/chip8-test-rom).

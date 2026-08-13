@@ -17,6 +17,7 @@ sassets
 stdint
 Terentev
 terentevnikita
+vblank
 Wcast
 Wconversion
 Wdeclaration
