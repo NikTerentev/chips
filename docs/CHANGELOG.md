@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.0
+
+- Release v1.0.0.
+
 ## 0.10.0
 
 - Refactor frame vblank wait.
