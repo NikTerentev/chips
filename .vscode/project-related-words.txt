@@ -3,6 +3,8 @@ ASYNTH
 awalsh
 checkmake
 Corax
+COSMAC
+Cowgod's
 cppdbg
 Cxkk
 Cxkk
@@ -10,7 +12,9 @@ CXNN
 DNDEBUG
 dxyn
 dxyn
+getkey
 libsdl
+Octo
 Octojam
 pkgs
 prek
