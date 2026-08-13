@@ -43,7 +43,7 @@
  * CHIP-8 instructions are divided into broad categories by the first "nibble",
  * or "half-byte", which is the first hexadecimal number.
  */
-#define GET_FIRST_NIBBLE(instruction) ((instruction & 0xF000) >> 12)
+#define GET_FIRST_NIBBLE(instruction) ((Uint8)((instruction & 0xF000) >> 12))
 /*
  * Get second, third and fourth nibbles (a 12-bit immediate memory address).
  */
@@ -61,7 +61,7 @@
 /*
  * Get second byte (third and fourth nibbles) - an 8-bit immediate number.
  */
-#define GET_THIRD_AND_FORTH_NIBBLES(instruction) (instruction & 0xFF)
+#define GET_THIRD_AND_FORTH_NIBBLES(instruction) ((Uint8)(instruction & 0xFF))
 /*
  * Get fourth nibble - a 4-bit number.
  */
@@ -234,8 +234,7 @@ static bool sdl_create_window_and_renderer(AppState *as)
  */
 static bool parse_command_line_args(int argc, char *argv[], AppState *appstate)
 {
-    Uint8 fps, ipf;
-    int   opt;
+    int opt, fps, ipf;
 
     while ((opt = getopt(argc, argv, "dr:f:i:")) != -1) {
         switch (opt) {
@@ -246,9 +245,9 @@ static bool parse_command_line_args(int argc, char *argv[], AppState *appstate)
             appstate->rom_file_path = optarg;
             break;
         case 'f':
-            fps = (Uint8)atoi(optarg);
+            fps = atoi(optarg);
             if (fps >= 1 && fps <= FPS_AND_IPF_UPPER_LIMIT) {
-                appstate->fps = fps;
+                appstate->fps = (Uint8)fps;
             } else {
                 printf("FPS cannot be less than 1 or more than %d\n",
                        FPS_AND_IPF_UPPER_LIMIT);
@@ -256,9 +255,9 @@ static bool parse_command_line_args(int argc, char *argv[], AppState *appstate)
             }
             break;
         case 'i':
-            ipf = (Uint8)atoi(optarg);
+            ipf = atoi(optarg);
             if (ipf >= 1 && ipf <= FPS_AND_IPF_UPPER_LIMIT) {
-                appstate->ipf = ipf;
+                appstate->ipf = (Uint8)ipf;
             } else {
                 printf("IPF cannot be less than 1 or more than %d\n",
                        FPS_AND_IPF_UPPER_LIMIT);
@@ -382,6 +381,7 @@ SDL_AppResult SDL_AppEvent(SDL_UNUSED void *appstate, SDL_Event *event)
     case SDL_EVENT_KEY_DOWN:
         if (event->key.scancode == SDL_SCANCODE_ESCAPE)
             return SDL_APP_SUCCESS;
+        return SDL_APP_CONTINUE;
     default:
         return SDL_APP_CONTINUE;
     }
@@ -755,7 +755,7 @@ static void instruction_Cxkk(AppState *appstate, char **message,
                              Uint8 second_nibble,
                              Uint8 third_and_fourth_nibbles)
 {
-    Uint8 random_number = (rand() & 0xFF) & third_and_fourth_nibbles;
+    Uint8 random_number = (Uint8)(rand() & 0xFF) & third_and_fourth_nibbles;
     appstate->chip8_context.V[second_nibble] = random_number;
     if (appstate->enable_logs)
         snprintf(*message, 256, "Generate random number: %x", random_number);
