@@ -9,10 +9,12 @@ cppdbg
 Cxkk
 Cxkk
 CXNN
+dinorun
 DNDEBUG
 dxyn
 dxyn
 getkey
+kout
 libsdl
 Octo
 Octojam

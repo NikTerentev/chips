@@ -45,6 +45,26 @@ make release
 ./chips -r path-to-rom.ch8   # or any other extension with ROM binary data
 ```
 
+### CLI options
+
+Debug mode (info about each executed instruction)
+
+``` shell
+./chips -r path-to-rom.ch8 -d
+```
+
+<p align="center">
+  <br>
+  <img alt="Debug mode" src="pictures/debug_mode.png" width = 900px>
+  <br><br>
+</p>
+
+Customize IPF (instructions per frame) and FPS (frames per second)
+
+``` shell
+./chips -r path-to-rom.ch8 -f 90 -i 30
+```
+
 ## What is currently implemented
 
 ### Emulator passes all the popular tests
@@ -129,25 +149,31 @@ make release
   <br><br>
 </p>
 
-### CLI options
+### Game examples
 
-Debug mode (info about each executed instruction)
-
-``` shell
-./chips -r path-to-rom.ch8 -d
-```
+[Br8kout](https://github.com/JohnEarnest/chip8Archive/tree/master/src/br8kout)
 
 <p align="center">
   <br>
-  <img alt="Debug mode" src="pictures/debug_mode.png" width = 900px>
+  <img alt="Br8kout" src="pictures/br8kout.png" width = 900px>
   <br><br>
 </p>
 
-Customize IPF (instructions per frame) and FPS (frames per second)
+[Dino run](https://github.com/JohnEarnest/chip8Archive/tree/master/src/dinorun)
 
-``` shell
-./chips -r path-to-rom.ch8 -f 90 -i 30
-```
+<p align="center">
+  <br>
+  <img alt="Dino run" src="pictures/dinorun.png" width = 900px>
+  <br><br>
+</p>
+
+[Slippery Slope](https://github.com/JohnEarnest/chip8Archive/tree/master/src/slipperyslope)
+
+<p align="center">
+  <br>
+  <img alt="Slippery Slope" src="pictures/slippery_slope.png" width = 900px>
+  <br><br>
+</p>
 
 ## Links
 
