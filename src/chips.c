@@ -780,7 +780,7 @@ static void instruction_dxyn(AppState *appstate, char **message,
 
     for (size_t y = 0; y < n; y++) {
         if (y_coord + y >= CHIP8_DISPLAY_HEIGHT)
-            break;
+            continue;
         sprite_data =
             appstate->chip8_context.RAM[appstate->chip8_context.I + y];
         display_row = &appstate->chip8_context.display_cells[y_coord + y];
